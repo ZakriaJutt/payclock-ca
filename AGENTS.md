@@ -1,6 +1,6 @@
 # AGENTS.md — PayClock (`payclock-ca`)
 
-Canonical instructions for any agent or person working in this repository. On 2026-11-10 it holds ten planning documents and no application. **Every command named in these documents is proposed until an implementation exists.**
+Canonical instructions for any agent or person working in this repository. Since 2026-11-11 (build milestone B1, owner-authorised before the Phase 0 gate) it holds the ten planning documents plus the foundation and deterministic date engine on branch `feat/b1-foundation`: no UI, no real provider, no lawyer-signed rule version. Status of every check: [verification-report-fixing.md section 9](verification-report-fixing.md#9-build-milestone-b1-2026-11-11). **Commands are proposed unless listed under "Commands that exist" below.**
 
 ## 1. Reading order
 
@@ -36,7 +36,7 @@ If two files disagree, the file in this table wins and the other is corrected in
 
 ## 4. Architecture conventions
 
-- Layout (proposed): `apps/web`, `apps/worker`, `packages/rules`, `packages/domain`, `packages/db`, `packages/platform`, `packages/templates`.
+- Layout: `apps/web`, `apps/worker`, `packages/rules`, `packages/domain`, `packages/db`, `packages/platform` exist (npm workspaces; pnpm is not installed); `packages/templates` is still proposed.
 - `packages/rules` is pure: no I/O, no clock, no network, no imports from other packages. All date and interest arithmetic lives there and nowhere else.
 - Rules are data per version. A change in law is a new `rule_version` with a new sign-off; an approved version is never edited.
 - Facts are append-only events. Deadlines are recomputed, never edited. A correction and its recomputation commit together.
@@ -49,7 +49,44 @@ If two files disagree, the file in this table wins and the other is corrected in
 
 ## 5. Reuse
 
-Before adding a helper, search `packages/platform` and `packages/rules`. Configuration, logging, correlation, queue access, storage keys and mail live once in `packages/platform`; apps must not copy them. Import packages by entry point only.
+Before adding a helper, search `packages/platform` and `packages/rules`. Configuration, logging, correlation, queue access, storage keys and mail live once in `packages/platform`; apps must not copy them. Import packages by entry point only (lint enforces it).
+
+### Utilities index (B1)
+
+All code lives under `workspace/` (npm workspace root); the repository root keeps only the ten documents, `.gitignore` and `Makefile`. Paths below are relative to `workspace/`.
+
+| Need | Use | Where |
+|---|---|---|
+| Civil date, add days, compare, weekday | `civil`, `addDays`, `daysBetween`, `dayOfWeek`, `minDate`, `isCivilDate` | `packages/rules/src/civil-date.ts` |
+| Holiday test and extension; holiday rows for seeding | `isHoliday`, `extendPastHolidays`, `ontarioHolidayRows` | `packages/rules/src/holidays.ts` |
+| All clock dates for one subcontract | `compute(input)` | `packages/rules/src/engine.ts` |
+| Transition regime | `selectRegime` | `packages/rules/src/regime.ts` |
+| Rule versions as data | `RULE_VERSIONS` (seeded as `draft` by `syncDraftRules`) | `packages/rules/src/versions.ts`, `packages/domain/src/rules-sync.ts` |
+| Overdue; interest arithmetic and the withheld statement | `overdueStatus`, `simpleInterestCents`, `interestStatement` | `packages/rules/src/overdue.ts`, `interest.ts` |
+| Hash, canonical JSON (pure) | `sha256Hex`, `canonicalJson` | `packages/rules/src/sha256.ts` |
+| Golden cases | `runGolden` | `packages/rules/golden/run.ts` |
+| Config | `loadConfig` | `packages/platform/src/config.ts` |
+| Logger with redaction; correlation; Toronto today | `createLogger`, `withCorrelation`, `normaliseCorrelationId`, `torontoToday` | `packages/platform/src/logger.ts`, `correlation.ts` |
+| Queue; job envelope that refuses a missing tenant | `createPgBossQueue`, `assertEnvelope`, `installQueueSchema` | `packages/platform/src/queue.ts` |
+| Database access (the only way) | `TenantDb.withTenant`, `withoutTenant`, `withGlobalWrite` (migrator only) | `packages/db/src/client.ts` |
+| Migrations, order check, ORM parity, test reset | `migrate`, `checkOrder`, `ormParity`, `resetTestSchemas` | `packages/db/src/` |
+| Use cases | `createProject`, `createSubcontract`, `createInvoice`, `addEvent`, `correctEvent`, `getInvoice`, `getRecomputation`, `recomputeBatch`, `invariantCheck` | `packages/domain/src/` |
+| Audit row | `audit` | `packages/domain/src/audit.ts` |
+
+### Commands that exist (B1)
+
+`make` targets run from the repository root; `npm` commands from `workspace/`.
+
+| Command | Does |
+|---|---|
+| `make setup` | `npm install`, create role `payclock_app` (NOSUPERUSER NOBYPASSRLS) and git-ignored `.env.local` / `.env.test`, migrate `payclock_dev` |
+| `make dev` / `make dev-check` | Migrate, seed, start API on 8104 and the worker, print "ready" from `/readyz`; `dev-check` then stops |
+| `make lint`, `make typecheck` | ESLint with import boundaries; `tsc --noEmit` |
+| `make test-unit`, `make test-integration` | Vitest; integration drops and re-migrates `payclock_test` first |
+| `make golden`, `make parity` | `scripts/golden-verify.ts`; `scripts/orm-parity.ts --test` |
+| `npm run db:migrate`, `npm run db:migrate-test`, `npm run seed` | Migrations plus queue schema; synthetic seed (refuses outside local/test) |
+
+Still proposed: Docker Compose, CI, staging, `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
 
 ## 6. Tenant safety
 

@@ -1,6 +1,6 @@
 # Schema — PayClock
 
-Labels and IDs: [Decision.md section 0](Decision.md#0-how-numbers-and-claims-are-labelled). Postgres 16, proposed; no migration exists. Synthetic examples only.
+Labels and IDs: [Decision.md section 0](Decision.md#0-how-numbers-and-claims-are-labelled). Postgres 16. Since B1 (2026-11-11) the core tables exist in `workspace/packages/db/migrations/20261111T100000_core.sql` with the matching ORM model in `workspace/packages/db/src/schema.ts`; tables marked "not in B1" below are still proposed. Synthetic examples only.
 
 ## 1. Entity-relationship diagram
 
@@ -31,6 +31,7 @@ erDiagram
   tenant ||--o{ audit_event : logs
   tenant ||--o{ digest_send : emails
   tenant ||--o{ billing_event : bills
+  tenant ||--o{ api_idempotency : replays
   rule_clock }o--o{ holiday : extends_past
   rule_clock }o--o{ interest_rate : reads
 ```
@@ -67,24 +68,24 @@ erDiagram
 
 | Table | Fields | Sens. |
 |---|---|---|
-| `event` | `tenant_id`; `scope_type` enum(project, subcontract, invoice); `scope_id uuid`; `event_type` enum(`EV-01`..`EV-19`), each a distinct value so that contract termination (EV-17), Form 8 publication (EV-18) and completion or abandonment (EV-09) cannot be stored as one another; `series_key text default 'main'` (distinguishes repeated events such as payments); `occurred_on date null`; `received_on date null` (EV-05 only: `occurred_on` is the day given, `received_on` the day the sub received it); `delivery_method text null`; `entered_by_operator bool default false`; `certainty` enum(confirmed, estimated, unknown); `amount_cents bigint null`; `document_id uuid null`; `version int default 1`; `supersedes_id uuid null` fk self; `superseded_at timestamptz null`; `reason text null`; `created_by` fk. Checks: (`certainty = 'unknown'`) = (`occurred_on is null`); `entered_by_operator` implies `certainty <> 'confirmed'`; `reason` not null when `supersedes_id` is not null. No update except setting `superseded_at`; no delete (trigger) | C |
+| `event` | `tenant_id`; `scope_type` enum(project, subcontract, invoice); `scope_id uuid`; `event_type` enum(`EV-01`..`EV-19`), each a distinct value so that contract termination (EV-17), Form 8 publication (EV-18) and completion or abandonment (EV-09) cannot be stored as one another; `series_key text default 'main'` (distinguishes repeated events such as payments); `occurred_on date null`; `received_on date null` (EV-05 only: `occurred_on` is the day given, `received_on` the day the sub received it); `delivery_method text null`; `entered_by_operator bool default false`; `certainty` enum(confirmed, estimated, unknown); `amount_cents bigint null`; `notice_form` enum(1.2, 1.3) null (EV-05 only: Form 1.2 owner non-payment or Form 1.3 dispute, which select paths D and E); `document_id uuid null` (foreign key added with `source_document`, not in B1); `version int default 1`; `supersedes_id uuid null` fk self; `superseded_at timestamptz null`; `reason text null`; `created_by` fk. Checks: (`certainty = 'unknown'`) = (`occurred_on is null`); `entered_by_operator` implies `certainty <> 'confirmed'`; `reason` not null when `supersedes_id` is not null; `notice_form` not null exactly for EV-05; `received_on` only for EV-05; `event_scope_check` ties each type to its scope (invoice: EV-01 to EV-06; subcontract: EV-07, EV-10, EV-14 to EV-16; project: the others); a trigger requires the scope row to exist in the same tenant. No update except setting `superseded_at`; no delete (trigger) | C |
 
 ### Rules (global, no tenant)
 
 | Table | Fields | Sens. |
 |---|---|---|
 | `legal_signoff` | `reviewer_name text`; `licence_jurisdiction text`; `memo_sha256 bytea`; `signed_on date`; `scope_note text` | I |
-| `rule_version` | `code text unique` (for example `ON-2026-01`); `jurisdiction text default 'ON'`; `effective_from date`; `effective_to date null`; `status` enum(draft, approved, retired) default draft; `legal_source text`; `signoff_id uuid null`; check: approved implies `signoff_id` not null; rows immutable once approved (trigger) | I |
+| `rule_version` | `code text unique` (for example `ON-2026-01`); `family text` (`ON-LEGACY`, `ON-NOPP`, `POST-2019`: the regime the version belongs to); `jurisdiction text default 'ON'`; `effective_from date`; `effective_to date null`; `status` enum(draft, approved, retired) default draft; `legal_source text`; `signoff_id uuid null`; check: approved implies `signoff_id` not null; rows immutable once approved (trigger) | I |
 | `rule_clock` | `rule_version_id` fk; `clock_code text` (`CLK-01`..`CLK-17`); `variant text default ''` (`a`, `b` for CLK-09); `trigger_spec jsonb` naming event types explicitly (for example CLK-11: `{"earliest_of":["EV-09","EV-17","EV-10","EV-07"],"ceiling_if_unknown":{"EV-17":"EV-18"}}`, where a ceiling can only produce `bound = no_later_than`; CLK-09b: `{"earliest_of":["EV-07","EV-09",{"termination_for_lien":{"actual":"EV-17","published":"EV-18","in_time_days":7}},"EV-10"]}`); `pending_question text null` (for example `L-09`: dependent output withheld); `offset_days int`; `window_end_days int null`; `extend_on_holiday bool`; `act_by_buffer_days int default 0`; `section_ref text`; `applies_when jsonb`; `computed bool default true`; `not_computed_reason text null`; unique(`rule_version_id`,`clock_code`,`variant`) | I |
 | `holiday` | pk(`jurisdiction`,`day date`); `name text`; `source text` | I |
-| `interest_rate` | `jurisdiction`; `effective_from date`; `effective_to date null`; `annual_rate numeric(6,4)`; `source text`; exclusion constraint on overlapping ranges | I |
+| `interest_rate` | `jurisdiction`; `effective_from date`; `effective_to date null`; `annual_rate numeric(6,4)` (decimal fraction, e.g. 0.0400); `source text`; no overlapping ranges, enforced by a trigger because `btree_gist` is not available | I |
 
 ### Computation
 
 | Table | Fields | Sens. |
 |---|---|---|
 | `computation_run` | `tenant_id`; `scope_type`; `scope_id`; `cause` enum(new_event, correction, rule_version, holiday_table, import); `cause_event_id uuid null`; `fact_version_read int`; `inputs_hash bytea`; `engine_version text`; `status` enum(succeeded, discarded, failed); `created_by uuid null` | C |
-| `deadline` | `tenant_id`; `subcontract_id` fk; `invoice_id uuid null`; `clock_code text`; `variant text default ''`; `rule_clock_id` fk; `computation_run_id` fk; `state` enum(computed, provisional, not_computable, not_applicable); `statutory_date date null`; `bound` enum(exact, no_later_than) default exact; `path text null` (CLK-17: A to H); `act_by_date date null`; `window_end_date date null`; `missing_facts text[] default '{}'`; `trigger_event_ids uuid[]`; `is_current bool default true`; `superseded_by_run_id uuid null`. Checks: `state = 'computed'` implies `statutory_date` not null, `missing_facts = '{}'` and `bound = 'exact'`; `bound = 'no_later_than'` implies `state = 'provisional'` | C |
+| `deadline` | `tenant_id`; `subcontract_id` fk; `invoice_id uuid null`; `clock_code text`; `variant text default ''`; `rule_clock_id` fk null (null only when no rule version covers the clock, so the state is `not_computable` or `not_applicable`); `computation_run_id` fk; `state` enum(computed, provisional, not_computable, not_applicable); `statutory_date date null`; `bound` enum(exact, no_later_than) default exact; `path text null` (CLK-17: A to H); `act_by_date date null`; `window_end_date date null`; `amount_cents bigint null` (CLK-17 and CLK-16: the amount the portion covers); `missing_facts text[] default '{}'`; `flags text[] default '{}'`; `withheld jsonb default '[]'` (outputs withheld pending a legal question, e.g. the extended day under L-09); `notes text[] default '{}'`; `trigger_event_ids uuid[]`; `is_current bool default true`; `superseded_by_run_id uuid null`. Checks: `state = 'computed'` implies `statutory_date` not null, `missing_facts = '{}'` and `bound = 'exact'`; `bound = 'no_later_than'` implies `state = 'provisional'`; a date exists exactly when the state is `computed` or `provisional`; those two states need `rule_clock_id`; a row that is not current names the run that superseded it. Only the supersession markers may be updated; no delete (trigger) | C |
 | `flag` | `tenant_id`; `entity_type text`; `entity_id uuid`; `code text` (`L-01`..`L-11`, `STALE_SENT`); `raised_by_run_id uuid null`; `resolved_at timestamptz null`; `resolved_by uuid null`; `note text null` | C |
 | `reminder` | `tenant_id`; `deadline_id` fk; `kind` enum(actby_d14, actby_d7, actby_d3, actby_d0, last_d5, last_d2, last_d0, due, due_plus3, urgent_moved_earlier); `send_on date`; `status` enum(scheduled, sent, cancelled, failed) default scheduled; `provider_message_id text null`; `attempts int default 0`; `correlation_id uuid`; unique(`deadline_id`,`kind`) | C |
 | `action` | `tenant_id`; `invoice_id` fk; `template_code text`; `template_version text`; `deadline_ids uuid[]`; `rendered_sha256 bytea`; `document_id uuid null`; `status` enum(draft, sent, stale, discarded) default draft; `sent_on date null`; `sent_method text null`; `sent_copy_document_id uuid null`; `stale_run_id uuid null`; `created_by` fk. Check: `status = 'sent'` implies `sent_on` and `sent_copy_document_id` not null. A sent row is never deleted; staleness of a sent action is carried by a `STALE_SENT` flag, not by changing `status` | C |
@@ -98,9 +99,12 @@ erDiagram
 | `digest_send` | `tenant_id`; `iso_week text`; `sent_at timestamptz null`; `status` enum(scheduled, sent, failed); `provider_message_id text null`; `deadline_ids uuid[]`; `content_sha256 bytea`; unique(`tenant_id`,`iso_week`) | C |
 | `billing_event` | `tenant_id uuid null`; `provider_event_id text unique`; `type text`; `received_at timestamptz`; `applied_at timestamptz null` | I |
 | `data_request` | `tenant_id`; `kind` enum(export, delete); `status` enum(requested, running, done, failed); `document_id uuid null`; `due_by date`; `requested_by` fk | I |
+| `api_idempotency` | `tenant_id`; `idempotency_key text`; `method text`; `path text`; `request_sha256 text`; `status_code int`; `response jsonb`; unique(`tenant_id`,`idempotency_key`). Stores the reply of each mutating API call; the same key with a different body is refused (422) | C |
 | `audit_event` | `id bigint identity`; `tenant_id uuid null`; `actor_id uuid null`; `action text`; `entity_type text`; `entity_id uuid null`; `before_hash bytea null`; `after_hash bytea null`; `correlation_id uuid`; `at timestamptz`. Insert only | I |
 
 Queue tables belong to pg-boss in schema `pgboss` and are not modelled in the ORM.
+
+Not in B1 (still proposed): `support_grant`, `source_document`, `holdback_entry`, `action`, `import_batch`, `import_row`, `digest_send`, `billing_event`, `data_request`; `tenant` billing and pilot columns other than `plan` and `subscription_status`.
 
 ## 4. Indexes and their queries
 
@@ -121,6 +125,9 @@ Queue tables belong to pg-boss in schema `pgboss` and are not modelled in the OR
 | `digest_send (tenant_id, iso_week)` unique | Refund test (b), M-04 alert evidence, digest idempotency |
 | `billing_event (provider_event_id)` unique | Webhook deduplication |
 | `rule_version (jurisdiction, effective_from) where status = 'approved'` | Version selection |
+| `deadline (tenant_id, computation_run_id)`; `deadline (tenant_id, superseded_by_run_id) where superseded_by_run_id is not null` | Recomputation diff (S-09) |
+| `subcontract (tenant_id, project_id)`; `invoice (tenant_id, subcontract_id)`; `membership (user_id)` | Recompute loading; session to membership |
+| `api_idempotency (tenant_id, idempotency_key)` unique | Idempotent API replies |
 
 ## 5. Permissions and tenant boundary
 
@@ -133,7 +140,7 @@ Queue tables belong to pg-boss in schema `pgboss` and are not modelled in the OR
 | Rule tables | read | read | read | write drafts; approve only a version drafted by another operator | read | read |
 | `audit_event` | read | none | read | read (rule actions) | insert | insert |
 
-- Database roles: `app_tenant` (row-level security forced; policy `tenant_id = current_setting('app.tenant_id')::uuid`), `app_rules_admin` (rule tables only), `app_migrator` (schema changes only, not used at runtime). No runtime role bypasses row-level security.
+- Database roles: `app_tenant` (locally `payclock_app`, NOSUPERUSER NOBYPASSRLS, created by `scripts/db-bootstrap.ts`; row-level security enabled and forced on every tenant table; policy `tenant_id = current_setting('app.tenant_id')::uuid`), `app_rules_admin` (rule tables only), `app_migrator` (schema changes only, not used at runtime). No runtime role bypasses row-level security.
 - Uniqueness is scoped per tenant except `app_user.email`, `rule_version.code`, `source_document.storage_key`.
 - Cross-tenant denial: a query without the tenant setting returns no rows and writes fail; APIs answer 404; storage keys start `t/{tenant_id}/` and links are issued only after a row-level read succeeds.
 
@@ -164,7 +171,7 @@ Each deadline points to its `rule_clock` (hence rule version and sign-off), its 
 
 ## 9. Migrations
 
-- Ordering: timestamped files, one linear history; CI fails if two branches add migrations that do not rebase to a single order (R-10).
+- Ordering: timestamped files (`YYYYMMDDTHHMMSS_name.sql`), one linear history recorded in `schema_migrations` with a checksum; an edited applied migration fails; CI fails if two branches add migrations that do not rebase to a single order (R-10).
 - ORM parity: the ORM schema is generated from, and diffed against, a database built from the migrations; any index or constraint present in one and not the other fails CI (R-08).
 - Backfills: separate, resumable scripts that work in keyed batches with a checkpoint table; safe to re-run (R-09).
 - Locks: indexes on populated tables are created concurrently outside a transaction; `lock_timeout` 5 s and retry; constraints added `not valid` then validated (R-11).

@@ -7,7 +7,7 @@ Labels and IDs: [Decision.md section 0](Decision.md#0-how-numbers-and-claims-are
 | Item | Status on 2026-11-10 |
 |---|---|
 | Planning documents | Ten files written by Author A |
-| Application | Does not exist. Every application check is `Not run` |
+| Application | B1 foundation and deterministic core built on branch `feat/b1-foundation` (2026-11-11), owner-authorised before the Phase 0 gate; see [section 9](#9-build-milestone-b1-2026-11-11). Checks not listed there stay `Not run` |
 | Independent review | Round 1 done: 19 findings (1 blocker, 13 major, 5 minor). Fix round 1 applied; round 2 retest by the independent reviewer: 12 closed, 2 closed with a part open (F-001, F-008), 5 open by design (F-003, F-004, F-009, F-010, F-013), and one minor regression F-020. The author then edited F-001, F-008 and F-020; those edits were checked by the lead and not re-reviewed |
 | Legal review | None. No lawyer has seen the rule table, disclaimer or templates |
 | Customer evidence | None. No prospect has been contacted |
@@ -33,17 +33,17 @@ Performed with a scratch script outside the repository and by reading; results i
 
 | Check | Tests | Status |
 |---|---|---|
-| Rule correctness | `UT-01` to `UT-19` | Not run |
-| Tenancy and roles, assisted loading | `IT-01`, `IT-02` | Not run |
+| Rule correctness | `UT-01` to `UT-19` | B1: passed except `UT-12` (blocked) and parts of `UT-14`, `UT-16`; section 9 |
+| Tenancy and roles, assisted loading | `IT-01`, `IT-02` | B1: `IT-01` partly passed, `IT-02` viewer case only; section 9 |
 | Billing and conversion | `IT-15` | Not run |
 | Email content and digest record | `IT-16` | Not run |
-| Correction, recomputation, staleness | `IT-03` to `IT-08`, `E2E-02` | Not run |
+| Correction, recomputation, staleness | `IT-03` to `IT-08`, `E2E-02` | B1: `IT-03` to `IT-06` passed; `IT-07`, `IT-08`, `E2E-02` not run; section 9 |
 | Import | `IT-09` | Not run |
-| Migrations | `IT-10` | Not run |
+| Migrations | `IT-10` | B1: parity and order parts passed; section 9 |
 | Files and links | `IT-11` | Not run |
-| Rule governance, logging | `IT-12` | Not run |
+| Rule governance, logging | `IT-12` | B1: logging part passed; section 9 |
 | Deletion and restore | `IT-13`, restore drill `T-5.1.4` | Not run |
-| Startup and persistence | `IT-14` | Not run |
+| Startup and persistence | `IT-14` | B1: worker-alone and start parts passed; section 9 |
 | Pilot promise, navigation, permissions, links | `E2E-01`, `E2E-03` to `E2E-06`, `E2E-09` | Not run |
 | Accessibility (WCAG 2.2 AA, manual) | `E2E-07`, `E2E-08` | Not run; no conformance claimed |
 | Security review against cited ASVS 5.0.0 requirements | `T-5.1.2` | Not run; no compliance claimed |
@@ -69,27 +69,27 @@ Performed with a scratch script outside the repository and by reading; results i
 
 ## 5. Production risk register
 
-Impact is written for this product: a subcontractor relying on dates for money and lien rights. All tests `Not run`.
+Impact is written for this product: a subcontractor relying on dates for money and lien rights. Tests are `Not run` unless a row cites a B1 run (section 9).
 
 | ID | Product impact | Prevention | Detection signal | Test and expected outcome | Task |
 |---|---|---|---|---|---|
-| R-01 | A delayed batch recompute or reminder job restores a lien date computed before a correction; the owner trusts the later date | In-transaction recompute; fact-version compare-and-set; one-current-deadline unique index; billing events deduplicated and state re-fetched | Nightly invariant job; discarded-run count | IT-05: stale result discarded, one current deadline; IT-15: late "payment failed" changes nothing | T-4.2.2 |
+| R-01 | A delayed batch recompute or reminder job restores a lien date computed before a correction; the owner trusts the later date | In-transaction recompute; fact-version compare-and-set; one-current-deadline unique index; billing events deduplicated and state re-fetched | Nightly invariant job; discarded-run count | IT-05: stale result discarded, one current deadline; IT-15: late "payment failed" changes nothing. B1 2026-11-11: IT-05 passed (`packages/domain/test/isolation.test.ts`); unique current-deadline index in the migration | T-4.2.2 |
 | R-02 | A reminder email is accepted by the provider after our timeout and shown as failed, so it is resent or the user is told nothing went out; or an import seems lost and is re-uploaded | Idempotency keys; reconcile sweep by `reminder.id`; "check status" | Reminders in `failed` later found `sent`; duplicate provider ids | IT-08, E2E-09: one email, truthful status | T-4.2.4 |
-| R-03 | A second day-counting helper in the web app disagrees with the rules package on holiday extension | All date arithmetic only in `packages/rules`; lint bans date maths elsewhere | Lint failures; golden diff | UT-13 plus lint fixture fails on a stray helper | T-2.1.1 |
-| R-04 | The web app imports rule internals and bypasses version selection | Entry-point-only imports enforced | Lint | Lint fixture with a deep import fails | T-2.1.1 |
-| R-05 | Another subcontractor sees a firm's disputed invoices and counterparties through an API, job, export or file link | Three-layer tenancy (TRD 8.2); tenant in job payload and storage key | Row-level-security denials; cross-tenant test in CI | IT-01: 404 everywhere, job refuses | T-2.2.1 |
+| R-03 | A second day-counting helper in the web app disagrees with the rules package on holiday extension | All date arithmetic only in `packages/rules`; lint bans date maths elsewhere | Lint failures; golden diff | UT-13 plus lint fixture fails on a stray helper. B1 2026-11-11: UT-13 passed; lint fixture `packages/rules/test/boundaries.test.ts` passed (rules may not import, use a clock or floats) | T-2.1.1 |
+| R-04 | The web app imports rule internals and bypasses version selection | Entry-point-only imports enforced | Lint | Lint fixture with a deep import fails. B1 2026-11-11: deep-import lint fixture passed (`packages/rules/test/boundaries.test.ts`) | T-2.1.1 |
+| R-05 | Another subcontractor sees a firm's disputed invoices and counterparties through an API, job, export or file link | Three-layer tenancy (TRD 8.2); tenant in job payload and storage key | Row-level-security denials; cross-tenant test in CI | IT-01: 404 everywhere, job refuses. B1 2026-11-11: IT-01 API, use-case and job parts passed (`apps/web/test/api.test.ts`, `packages/domain/test/isolation.test.ts`, `apps/worker/test/worker.test.ts`); export and file link not built | T-2.2.1 |
 | R-06 | Worker uses a copied holiday list or config and sends reminders on different dates from the screen | One config and one holiday source in shared packages | Config hash logged by both processes at start | IT-14 compares hashes; IT-12 | T-2.1.5 |
-| R-07 | Worker crashes at start because the logger pulls a web-only module; reminders stop silently | Platform package has no web imports; worker start in CI | Readiness check; queue age alert | IT-14: worker healthy alone | T-2.1.5 |
-| R-08 | The one-current-deadline index exists in a migration but not in the ORM and is dropped by a later generated migration, allowing two "current" lien dates | Parity check in CI | `scripts/orm-parity` diff | IT-10: empty diff | T-2.2.3 |
+| R-07 | Worker crashes at start because the logger pulls a web-only module; reminders stop silently | Platform package has no web imports; worker start in CI | Readiness check; queue age alert | IT-14: worker healthy alone. B1 2026-11-11: IT-14 worker-alone part passed (`apps/worker/test/worker.test.ts`) | T-2.1.5 |
+| R-08 | The one-current-deadline index exists in a migration but not in the ORM and is dropped by a later generated migration, allowing two "current" lien dates | Parity check in CI | `scripts/orm-parity` diff | IT-10: empty diff. B1 2026-11-11: IT-10 parity part passed, empty diff (`packages/db/test/migrations.test.ts`, `scripts/orm-parity.ts`) | T-2.2.3 |
 | R-09 | A backfill of `act_by_date` stops halfway; some invoices show no act-by date | Resumable batches with checkpoints; engine tolerates null by recomputing | Checkpoint lag; invariant job | IT-10: interrupted backfill completes on resume | T-2.2.3 |
-| R-10 | Two branches add migrations; production applies them in a different order from staging and rule tables diverge | Linear order check | CI failure | IT-10: conflicting branches fail CI | T-2.2.3 |
+| R-10 | Two branches add migrations; production applies them in a different order from staging and rule tables diverge | Linear order check | CI failure | IT-10: conflicting branches fail CI. B1 2026-11-11: IT-10 order part passed against fixtures (`packages/db/test/migrations.test.ts`); no CI yet | T-2.2.3 |
 | R-11 | Creating an index on `deadline` blocks corrections during business hours | Concurrent index creation, lock timeout | Lock wait metric during deploy | IT-10: writes continue during index build | T-2.2.3 |
-| R-12 | A failed reminder cannot be traced to the correction that caused it; or logs expose invoice amounts and general-contractor names | Correlation id through request, job, mail; redaction rules | Log sampling in CI | IT-12: id present end to end; no sensitive values | T-2.1.5 |
+| R-12 | A failed reminder cannot be traced to the correction that caused it; or logs expose invoice amounts and general-contractor names | Correlation id through request, job, mail; redaction rules | Log sampling in CI | IT-12: id present end to end; no sensitive values. B1 2026-11-11: IT-12 logging part passed (`apps/web/test/api.test.ts`, `packages/platform/test/platform.test.ts`); job and mail parts not built | T-2.1.5 |
 | R-13 | An evidence file overwrites another firm's or another invoice's file | Server-generated keys with tenant, purpose, entity, uuid | Storage audit for keys outside pattern | IT-11: key pattern enforced | T-2.2.4 |
 | R-14 | Uploaded aging lists (customer and amount data) remain after 30 days or after deletion | `expires_at` and nightly sweep with alert | Count of expired objects still present | IT-11, IT-13: expired file gone; deletion complete | T-6.1.3 |
 | R-15 | Recreating a service wipes uploaded evidence or the database | Managed database and storage; stateless containers; named volume locally | Restore drill; storage object count | IT-14: data intact after recreation | T-2.1.4 |
 | R-16 | A deadline email or evidence link points to `localhost` or an internal host and the owner cannot open it on the due day | Links built only from `APP_PUBLIC_URL`; start fails on loopback in production | Link checker | IT-11, E2E-06: host equals public URL | T-2.2.4 |
-| R-17 | A developer runs web without the worker; reminders never fire in testing and the defect ships | One start command with health checks | "ready" line lists every service | IT-14 | T-2.1.2 |
+| R-17 | A developer runs web without the worker; reminders never fire in testing and the defect ships | One start command with health checks | "ready" line lists every service | IT-14. B1 2026-11-11: `make dev-check` printed "ready" with database and queue checks; fails naming the dependency when Postgres is unreachable (section 9) | T-2.1.2 |
 | R-18 | After Back or refresh the user re-submits a correction or loses the reason typed; a diff link in an email opens a blank page | URL state, idempotency, form persistence, permanent diff URLs | Client error rate on S-08, S-09 | E2E-04 | T-4.3.7 |
 | R-19 | Import silently skips 5 invoices, which then have no deadlines; or a retry doubles invoices and reminders | Per-row results, resume from last committed row, unique invoice key | Batch counts not summing to total | IT-09: 31/4/5, no duplicates | T-4.1.2 |
 | R-20 | "Due" is read as the lien last day; a stale menu item leads to a removed page | Clock names with trigger on every date; link checker; glossary | Support questions; crawler | E2E-06; usability pass in T-1.1.3 | T-4.3.7 |
@@ -181,3 +181,83 @@ Reserved for the independent reviewer. IDs `F-001` onward. Authors record fixes;
 | 8 | Development estimate 2.7-4.0 times the brief's | Cash requirement | Founder | Decision before Phase 1 |
 | 9 | Location of the founder's VPS unknown | AD-09 host choice | Founder | `T-2.1.4` |
 | 10 | Tagged-PDF accessibility of templates undecided ("not met") | WCAG coverage of exports | Engineer | `T-4.3.3` |
+| 19 | Holiday table: observed-day substitutions of Legislation Act s. 88 (a listed day on a weekend) are not encoded, and the s. 88(2) list was not re-opened on 2026-11-11 (e-Laws page is script-rendered). Missing a substitute holiday shows a payment due date one day early (the conservative side for counterparty duties); rights clocks are never extended | Customer use of any date near a weekend holiday | Rules lead | Text of s. 88 read and the holiday rows re-verified |
+| 20 | `UT-12` needs the Phase 0 lawyer-checked invoices; only the 15 synthetic catalogue cases exist | Gate "all pilot invoices reproduce" | Rules lead | `T-0.1.3`, `T-3.1.7` |
+| 21 | L-06 "near" a transition date is not defined (no window), so it is raised only when EV-11 or EV-12 is unknown or the premises facts are unknown in the 2018 lease window | Applicability flags near 2018-07-01, 2018-12-06, 2019-10-01 | Rules lead, Lawyer | A window is decided and added to Decision 4.4 |
+
+## 9. Build milestone B1 (2026-11-11)
+
+On 2026-11-11 the owner authorised implementation in this repository before the Phase 0 sales gate (`T-0.3.4`) had passed. This records that authorisation; the decision text in Decision.md is unchanged, and AGENTS.md section 3 ("No Phase 1-6 work before `T-0.3.4` records build") is overridden for B1 by that instruction only. No outreach, report or customer data was involved. Branch `feat/b1-foundation`, not pushed.
+
+### 9.1 Tasks implemented
+
+| Task | What exists | Not done |
+|---|---|---|
+| T-2.1.1 | npm workspace in `workspace/` (the root keeps only the ten documents, `.gitignore`, `Makefile`; all paths in this section are relative to `workspace/`) with `apps/web`, `apps/worker`, `packages/rules`, `packages/domain`, `packages/db`, `packages/platform`; import-boundary lint with failing fixtures | CI hook; duplicate-utility check; `packages/templates` (no templates in B1) |
+| T-2.1.2 | `make dev` / `scripts/dev.ts`: checks Postgres, migrates, seeds, starts API (8104) and worker, prints "ready" from `/readyz` | Compose file (Docker not installed; stays proposed), storage emulator, mail catcher |
+| T-2.1.5 | Typed config (zod), redacting JSON logger, correlation ids, pg-boss queue client | Config hash logging (R-06) |
+| T-2.2.1 | Migration `20261111T100000_core.sql`: tenant, app_user, membership, project, subcontract, invoice, event, legal_signoff, rule_version, rule_clock, holiday, interest_rate, computation_run, deadline, flag, reminder, audit_event, api_idempotency; RLS enabled and forced; composite tenant foreign keys; append-only triggers; tenant-scoped client | support_grant, source_document, holdback_entry, action, import tables, digest_send, billing_event, data_request |
+| T-2.2.3 | ORM parity check, migration checksum and order check | Backfill runner, concurrent-index convention |
+| T-2.2.5 | Audit writer used by every implemented use case | |
+| T-3.1.1 to T-3.1.7 | Pure `packages/rules`: civil dates, holiday extension, regime selection, CLK-01 to CLK-11, CLK-13, CLK-14, CLK-16, CLK-17 paths A to H per amount, termination with distinct EV-09/EV-17/EV-18 and the ceiling rule, L-09 withholding, interest arithmetic, golden runner | CLK-12, CLK-15 |
+| T-4.1.1 | `POST /projects`, `/subcontracts`, `/invoices` (409 on duplicate number) | S-04, S-05 forms |
+| T-4.2.1 | `POST /events` with certainty and unknown | S-08, evidence upload |
+| T-4.2.2 | In-transaction recompute under a project lock; fact-version compare-and-set `recompute.batch`; invariant check | Scheduled invariant job |
+| T-4.2.3 | `GET /recomputations/{id}` diff (rights clocks moved earlier first); superseded reminders cancelled; urgent reminder row when a rights act-by date moves earlier to within 14 days | S-09 screen; stale actions and L-10 (actions not built) |
+
+Blocked or not started, with reason: T-2.1.3 (CI: no pipeline run in B1; the lead pushes); T-2.1.4 (hosting and database accounts); T-2.2.2 (Supabase Auth account; a fake provider behind an interface is used and refused outside local/test); T-2.2.4 (storage provider); T-4.1.2 and all of M4.3 (out of B1 scope); every Phase 0 and Phase 1 task (go-to-market and lawyer work; L-01 sign-off absent, so every rule version is `draft` and every result carries flag L-01).
+
+### 9.2 Commands and results (clean test database)
+
+Run on 2026-11-11 from `workspace/` after `npx tsx scripts/db-reset-test.ts` (drops `public` and `pgboss` in `payclock_test`); the integration global setup re-migrates and loads draft rules and holidays. All tests connect as `payclock_app` (NOSUPERUSER NOBYPASSRLS) except seeding.
+
+| Command | Result |
+|---|---|
+| `npm run lint` | 0 problems |
+| `npm run typecheck` | 0 errors |
+| `npm run test:unit` | 8 files, 65 tests passed |
+| `npm run test:integration` | 5 files, 37 tests passed |
+| `npm run golden-verify` | 15/15 catalogue cases equal |
+| `npx tsx scripts/orm-parity.ts --test` | 0 differences |
+| `npx tsx scripts/dev.ts --check` | "ready" with `{"database":true,"queue":true}`; with an unreachable database: "NOT READY: database unhealthy", non-zero |
+| `npm audit --omit=dev` | 0 vulnerabilities after upgrading drizzle-orm to 0.45.4 and zod to 4.6.7; dev-only advisories remain in the test runner's dependencies (tinypool via vitest 3.2.4) |
+
+### 9.3 Results per test ID
+
+| Test | Command | Result |
+|---|---|---|
+| UT-01 to UT-04 | `npm run test:unit` (`counting.test.ts`) | Passed |
+| UT-05, UT-06, UT-07 | same (`payment.test.ts`) | Passed |
+| UT-08 | same (`regime.test.ts`) | Passed, with the fixture correction in section 9.4 item 1 |
+| UT-09 | same (`payment.test.ts`) | Passed: arithmetic CAD 142.03; customer-facing amount withheld (L-09) |
+| UT-10, UT-11, UT-15 | same (`rights.test.ts`) | Passed. UT-15 ceiling: CLK-11 "no later than 2026-12-14", 2026-12-15 never output; plus a sweep of 121 termination dates and 90 publication dates showing no ceiling is later than any consistent exact date |
+| UT-16 | same | Passed for dates, bounds, single "no later than" date and the s. 39(4) request offer; reminder wording `Not run` (reminders are not sent in B1) |
+| UT-13 | same (`determinism.test.ts`) | Passed |
+| UT-14 | same | Interest-statement refusal passed; reminder-template part `Not run` (no templates) |
+| UT-17, UT-18, UT-19 | same (`payment.test.ts`) | Passed, with the fixture clarification in section 9.4 item 2 |
+| UT-12 | `npm run golden-verify` | `Not run` as specified (200 lawyer-checked cases do not exist); the runner passes 15/15 catalogue cases |
+| IT-01 | `npm run test:integration` | Partly passed: zero rows without tenant context on every tenant table, writes refused, tenant B gets 404 through API and use cases, job without tenant refused before reading. Export and file link `Not run` (not built) |
+| IT-02 | same | Viewer correction 403 passed; the other cases `Not run` (no grants or deletion) |
+| IT-03, IT-04, IT-05, IT-06 | same | Passed |
+| IT-10 | same | Parity, edited-migration and out-of-order parts passed; backfill and concurrent-index parts `Not run` |
+| IT-12 | same | Correlation id on every request log line and no amounts or names passed; rule-approval parts `Not run` |
+| IT-14 | same, and `scripts/dev.ts --check` | Worker starts alone without web modules; start command reaches "ready". Recreate-services part `Not run` |
+| All other UT, IT, E2E | | `Not run` |
+
+### 9.4 Document corrections made in B1
+
+1. `UT-08` (execution-plan.md 7.1): the first case gave only EV-11 2019-09-30. With EV-12 unknown the regime cannot be chosen (a procurement before 2018-07-01 would make it `ON-LEGACY`), so the engine correctly answers "applicability unknown". The fixture now states EV-12 2019-06-03.
+2. `UT-17` to `UT-19`: "same invoice" now says which facts carry over; the late owner payment of `UT-17` is not part of the second `UT-19` case, where the owner pays the noticed amount on 2026-12-01.
+3. schema.md: `event.notice_form` (Form 1.2 or 1.3 of EV-05; paths D and E need it) and `event_scope_check`; `deadline.amount_cents` (per-amount CLK-17 and CLK-16), `flags`, `withheld`, `notes`; `deadline.rule_clock_id` nullable when no version covers the clock; `rule_version.family`; new table `api_idempotency`; the interest-rate overlap rule is a trigger because `btree_gist` is not available; the runtime role is `payclock_app` locally; B1 creates only the core tables.
+4. execution-plan.md section 6: commands that now exist are marked.
+5. AGENTS.md state line, utilities index and commands; CLAUDE.md test status line.
+
+### 9.5 Interpretations made in code, for the Rules lead and lawyer to confirm
+
+- An event not recorded is treated as not having happened; an event recorded with certainty `unknown` happened on an unknown date and makes dependent "earliest of" results "no later than". A recorded EV-18 implies a termination happened, so a missing EV-17 is then treated as unknown (ceiling rule), never as absent.
+- An `estimated` trigger leaves the state `computed` (the Decision 4.5 example shows an overdue invoice from an estimated EV-01); the estimated trigger ids travel with the result and block interest statements (UT-14).
+- EV-04 `amount_cents` is the part of this invoice's net amount (amount minus holdback) that the owner payment covers; null means all.
+- Two liens give two perfection clocks, CLK-10a and CLK-10b, each from its own un-extended CLK-09 day.
+- A Form 8 publication dated before EV-17 is inconsistent; the engine uses the earlier date with L-11.
+- Rule versions `ON-2019-10` (lien, adjudication, holdback) and `ON-LEGACY` compute nothing ("not computed; lawyer required"); `ON-NOPP` computes lien clocks only.
+- Redis database 3 was assigned but is not used: the TRD keeps the queue in Postgres (AD-05). The API runs on `node:http` for B1; a Next.js route handler can wrap it (AD-01 unchanged).

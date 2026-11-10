@@ -223,7 +223,7 @@ The brief's development estimate is 110 hours / 14 days `[C]`. This plan's build
 
 ## 6. Proposed scripts and commands
 
-All proposed; none exists.
+Proposed unless marked. Exist since B1 (2026-11-11), under `workspace/`: `make dev` (as `scripts/dev.ts`, services run directly, no Compose), `scripts/seed-synthetic`, `scripts/check-migrations` (built into `npm run db:migrate` and `IT-10`), `scripts/orm-parity`, `scripts/golden-verify`. Not yet: `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
 
 | Script | Purpose | Inputs | Outputs | Failure behaviour |
 |---|---|---|---|---|
@@ -238,7 +238,7 @@ All proposed; none exists.
 
 ## 7. Test catalogue
 
-All `Not run`. No fixture asserts a result that depends on an open legal question (L-07, L-08, L-09, the old s. 31(6)-(7)); those parts are marked pending and the test asserts that the dependent output is withheld. Fixtures are synthetic: Northline Electric Ltd. (tenant A), Baycrest Mechanical Inc. (tenant B), contractor Harbourgate Builders Inc., project Lakeshore Clinic Fit-out, prime contract 2026-02-10, procurement start 2025-11-03, invoice INV-1042 for CAD 48,000 with CAD 4,800 holdback.
+Status per test: [verification-report-fixing.md section 9](verification-report-fixing.md#9-build-milestone-b1-2026-11-11); everything not listed there is `Not run`. No fixture asserts a result that depends on an open legal question (L-07, L-08, L-09, the old s. 31(6)-(7)); those parts are marked pending and the test asserts that the dependent output is withheld. Fixtures are synthetic: Northline Electric Ltd. (tenant A), Baycrest Mechanical Inc. (tenant B), contractor Harbourgate Builders Inc., project Lakeshore Clinic Fit-out, prime contract 2026-02-10, procurement start 2025-11-03, invoice INV-1042 for CAD 48,000 with CAD 4,800 holdback.
 
 ### 7.1 Unit tests (rules package, no database)
 
@@ -251,7 +251,7 @@ All `Not run`. No fixture asserts a result that depends on an open legal questio
 | UT-05 | EV-01 and EV-02 2026-10-08; EV-04 2026-11-02 (within time), full payment; then partial payment of 60% | Path A: CLK-17 2026-11-09. Path B: paid portion 2026-11-09, remainder 2026-11-12 under path C |
 | UT-06 | EV-03 2026-10-20; then no owner notice with EV-01 2026-10-08; EV-05 Form 1.2 on 2026-10-27 | CLK-05 2026-10-27; then 2026-11-12; CLK-06 2026-11-17 |
 | UT-07 | EV-01 unknown, EV-07 2026-09-18 | CLK-03, CLK-04, CLK-05, CLK-16 `not_computable` with missing fact EV-01; CLK-09 and CLK-11 `computed` or `provisional`; no clock passes |
-| UT-08 | EV-11 2019-09-30; EV-11 2019-10-01 with EV-12 2019-09-15; EV-11 2018-06-30; EV-12 unknown; EV-11 2026-02-10 with EV-12 2025-11-03 | `ON-NOPP`; `ON-NOPP`; `ON-LEGACY` not computed; `not_computable` + L-06; `ON-2026-01` |
+| UT-08 | EV-11 2019-09-30 with EV-12 2019-06-03; EV-11 2019-10-01 with EV-12 2019-09-15; EV-11 2018-06-30; EV-11 2026-02-10 with EV-12 unknown; EV-11 2026-02-10 with EV-12 2025-11-03 | `ON-NOPP`; `ON-NOPP`; `ON-LEGACY` not computed; `not_computable` + L-06; `ON-2026-01` |
 | UT-09 | Arithmetic only: CAD 43,200.00 unpaid from 2026-11-13 for 30 days at a synthetic 4.00% | CAD 142.03. Which rate applies is pending L-09: no customer-facing interest amount is produced, and the test asserts the output is withheld while the rule row carries `pending_question` |
 | UT-10 | No certificate (variant b). EV-07 2026-09-30; then corrected to 2026-09-18; then EV-08 set to unknown | CLK-09b last day 2026-11-29 (a Sunday, shown un-extended), act-by 2026-11-19, CLK-10 2027-02-27; then 2026-11-17, act-by 2026-11-07, CLK-10 2027-02-15 (Family Day, shown un-extended); the extended days are **not asserted**: that part of the fixture is pending L-09 and the test asserts the extended output is withheld with the flag. With EV-08 unknown: state `provisional`, bound `no_later_than`, missing EV-08 |
 | UT-11 | EV-07 2026-09-18; EV-11 2026-02-10; EV-13 2027-02-22; EV-11 2025-05-01 | CLK-11 2026-12-17; Form 6 by 2027-02-24; owner payment window 2027-04-23 to 2027-05-07; pre-2026 contract gives L-07, no date |
@@ -260,8 +260,8 @@ All `Not run`. No fixture asserts a result that depends on an open legal questio
 | UT-15 | EV-17 2026-09-10, EV-18 2026-09-15 (in time), EV-07 2026-09-16; then EV-18 2026-09-21 (late); then EV-17 unknown with EV-18 2026-09-15 | CLK-09b 2026-11-14 (from publication), CLK-11 2026-12-09 (from actual termination): different bases. Late Form 8: CLK-09b 2026-11-09 with L-11, CLK-11 unchanged. EV-17 unknown (ceiling rule): CLK-11 "no later than 2026-12-14" (EV-18 + 90: 15 + 31 + 30 + 14 days; earlier than EV-07 + 90 = 2026-12-15, which must not be shown), CLK-09b "no later than 2026-11-14"; both `provisional`, bound `no_later_than`, missing EV-17, L-11; no `exact` date results from EV-18 for CLK-11 in any case |
 | UT-16 | EV-19 2026-08-25, EV-08 2026-09-01, supply continues to EV-07 2026-10-15; then EV-08 and EV-19 unknown | Two liens: CLK-09a 2026-10-31, CLK-09b 2026-12-14. Unknown publication: one date "no later than 2026-12-14", `provisional`; reminders carry the "may be earlier" wording; s. 39(4) request offered |
 | UT-17 | EV-01 and EV-02 2026-10-08; owner pays late, EV-04 2026-11-07 (day 30); no notice | Path C: CLK-17 2026-11-12, not 2026-11-14; CLK-16 2026-11-13 |
-| UT-18 | Same invoice; Form 1.3 given and received 2026-10-28 (day 20) for the full CAD 43,200; then for CAD 10,000 only | Path E: no due date, "disputed by notice", not overdue on 2026-11-20, no CLK-16, L-05. Partial: CAD 33,200 due 2026-11-12 under path C; CAD 10,000 path E |
-| UT-19 | Same invoice; Form 1.2 received 2026-11-13 (day 36), day given unknown; then Form 1.2 given 2026-10-28 and owner pays that amount on 2026-12-01 | Path F: CLK-17 2026-11-12 `provisional`, L-05, interest statement refused. Path D: suspended, CLK-06 2026-11-18; after payment CLK-17 2026-12-08 |
+| UT-18 | Same invoice and facts as UT-17; Form 1.3 given and received 2026-10-28 (day 20) for the full CAD 43,200; then for CAD 10,000 only | Path E: no due date, "disputed by notice", not overdue on 2026-11-20, no CLK-16, L-05. Partial: CAD 33,200 due 2026-11-12 under path C; CAD 10,000 path E |
+| UT-19 | Same invoice; Form 1.2 received 2026-11-13 (day 36), day given unknown, with the UT-17 late payment; then, without that payment, Form 1.2 given 2026-10-28 and owner pays that amount on 2026-12-01 | Path F: CLK-17 2026-11-12 `provisional`, L-05, interest statement refused. Path D: suspended, CLK-06 2026-11-18; after payment CLK-17 2026-12-08 |
 | UT-14 | Interest statement requested with EV-01 `estimated` | Refused with reason; reminder template allowed with non-statutory wording |
 
 ### 7.2 Integration tests (real database, fake providers)

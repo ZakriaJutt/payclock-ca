@@ -43,4 +43,4 @@ Invoice amounts, amounts in dispute, names of general contractors and owners, no
 5. `IT-01`: cross-tenant access returns 404 through API, job, export and file link.
 6. `IT-03`, `IT-05`, `IT-07`: a correction is atomic, an out-of-order job cannot restore an old date, and stale actions are marked.
 
-Tests are defined in [execution-plan.md section 7](execution-plan.md#7-test-catalogue). All are `Not run`.
+Tests are defined in [execution-plan.md section 7](execution-plan.md#7-test-catalogue). Results of the B1 run (2026-11-11) are in [verification-report-fixing.md section 9](verification-report-fixing.md#9-build-milestone-b1-2026-11-11); `UT-12`, `IT-07` and every test not listed there are `Not run`.
