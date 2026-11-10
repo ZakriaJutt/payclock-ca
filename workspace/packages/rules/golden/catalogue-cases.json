@@ -1,0 +1,24 @@
+{
+  "source": "execution-plan.md section 7.1 and Decision.md 4.2.2 / 4.5 synthetic examples; NOT the Phase 0 lawyer-checked cases (none exist yet, UT-12 blocked)",
+  "base_events": [
+    { "type": "EV-11", "on": "2026-02-10" },
+    { "type": "EV-12", "on": "2025-11-03" }
+  ],
+  "cases": [
+    { "id": "UT-01", "events": [{ "type": "EV-01", "on": "2026-10-08" }], "expect": [{ "clock": "CLK-04", "date": "2026-11-12", "state": "computed" }] },
+    { "id": "UT-02", "events": [{ "type": "EV-01", "on": "2026-10-04" }], "expect": [{ "clock": "CLK-04", "date": "2026-11-09" }] },
+    { "id": "UT-03", "events": [{ "type": "EV-01", "on": "2026-10-07" }], "expect": [{ "clock": "CLK-04", "date": "2026-11-12" }] },
+    { "id": "UT-04", "events": [{ "type": "EV-01", "on": "2026-10-03" }], "expect": [{ "clock": "CLK-04", "date": "2026-11-07" }] },
+    { "id": "UT-05-A", "events": [{ "type": "EV-01", "on": "2026-10-08" }, { "type": "EV-02", "on": "2026-10-08" }, { "type": "EV-04", "on": "2026-11-02" }], "expect": [{ "clock": "CLK-17", "path": "A", "date": "2026-11-09" }] },
+    { "id": "UT-06-a", "events": [{ "type": "EV-01", "on": "2026-10-08" }, { "type": "EV-03", "on": "2026-10-20" }], "expect": [{ "clock": "CLK-05", "date": "2026-10-27" }] },
+    { "id": "UT-06-b", "events": [{ "type": "EV-01", "on": "2026-10-08" }, { "type": "EV-05", "on": "2026-10-27", "form": "1.2" }], "expect": [{ "clock": "CLK-05", "date": "2026-11-12" }, { "clock": "CLK-06", "date": "2026-11-17" }] },
+    { "id": "UT-10-1", "events": [{ "type": "EV-07", "on": "2026-09-30" }], "expect": [{ "clock": "CLK-09", "variant": "b", "date": "2026-11-29", "act_by": "2026-11-19" }, { "clock": "CLK-10", "variant": "b", "date": "2027-02-27" }] },
+    { "id": "UT-10-2", "events": [{ "type": "EV-07", "on": "2026-09-18" }], "expect": [{ "clock": "CLK-09", "variant": "b", "date": "2026-11-17", "act_by": "2026-11-07" }, { "clock": "CLK-10", "variant": "b", "date": "2027-02-15" }, { "clock": "CLK-11", "date": "2026-12-17" }] },
+    { "id": "UT-15-in-time", "events": [{ "type": "EV-17", "on": "2026-09-10" }, { "type": "EV-18", "on": "2026-09-15" }, { "type": "EV-07", "on": "2026-09-16" }], "expect": [{ "clock": "CLK-09", "variant": "b", "date": "2026-11-14" }, { "clock": "CLK-11", "date": "2026-12-09" }] },
+    { "id": "UT-15-late", "events": [{ "type": "EV-17", "on": "2026-09-10" }, { "type": "EV-18", "on": "2026-09-21" }, { "type": "EV-07", "on": "2026-09-16" }], "expect": [{ "clock": "CLK-09", "variant": "b", "date": "2026-11-09" }, { "clock": "CLK-11", "date": "2026-12-09" }] },
+    { "id": "UT-15-ceiling", "events": [{ "type": "EV-17", "on": null }, { "type": "EV-18", "on": "2026-09-15" }, { "type": "EV-07", "on": "2026-09-16" }], "expect": [{ "clock": "CLK-11", "date": "2026-12-14", "bound": "no_later_than", "state": "provisional" }, { "clock": "CLK-09", "variant": "b", "date": "2026-11-14", "bound": "no_later_than" }] },
+    { "id": "UT-16", "events": [{ "type": "EV-19", "on": "2026-08-25" }, { "type": "EV-08", "on": "2026-09-01" }, { "type": "EV-07", "on": "2026-10-15" }], "expect": [{ "clock": "CLK-09", "variant": "a", "date": "2026-10-31" }, { "clock": "CLK-09", "variant": "b", "date": "2026-12-14" }] },
+    { "id": "UT-17", "events": [{ "type": "EV-01", "on": "2026-10-08" }, { "type": "EV-02", "on": "2026-10-08" }, { "type": "EV-04", "on": "2026-11-07" }], "expect": [{ "clock": "CLK-17", "path": "C", "date": "2026-11-12" }, { "clock": "CLK-16", "date": "2026-11-13" }] },
+    { "id": "DEC-4.5-termination", "events": [{ "type": "EV-17", "on": "2026-09-10" }, { "type": "EV-18", "on": "2026-09-15" }], "expect": [{ "clock": "CLK-09", "variant": "b", "date": "2026-11-14" }, { "clock": "CLK-11", "date": "2026-12-09" }] }
+  ]
+}
