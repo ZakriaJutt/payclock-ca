@@ -1,0 +1,15 @@
+node_modules/
+.venv/
+.env
+.env.*
+!.env.example
+dist/
+build/
+coverage/
+.next/
+.cache/
+.vitest/
+*.tsbuildinfo
+.DS_Store
+.local-data/
+*.log

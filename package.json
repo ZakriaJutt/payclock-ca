@@ -1,0 +1,31 @@
+{
+  "name": "payclock",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test": "vitest run",
+    "db:bootstrap": "tsx scripts/db-bootstrap.ts",
+    "db:migrate": "tsx packages/db/src/migrate-cli.ts",
+    "db:reset-test": "tsx scripts/db-reset-test.ts",
+    "seed": "tsx scripts/seed-synthetic.ts",
+    "golden-verify": "tsx scripts/golden-verify.ts",
+    "orm-parity": "tsx scripts/orm-parity.ts",
+    "dev": "tsx scripts/dev.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.10.1",
+    "@types/pg": "8.15.6",
+    "eslint": "9.39.5",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4",
+    "vitest": "3.2.4"
+  }
+}
