@@ -10,7 +10,8 @@ import type {
 export const ENGINE_VERSION = 'payclock-rules 0.1.0';
 
 const DAY_2026_01_01 = civil('2026-01-01');
-const RIGHTS_CLOCKS: ReadonlySet<ClockCode> = new Set(['CLK-09', 'CLK-10', 'CLK-11']);
+export const RIGHTS_CLOCK_CODES: ReadonlySet<ClockCode> = new Set(['CLK-09', 'CLK-10', 'CLK-11']);
+const RIGHTS_CLOCKS = RIGHTS_CLOCK_CODES;
 const PAYMENT_CLOCKS: readonly ClockCode[] = [
   'CLK-01', 'CLK-02', 'CLK-03', 'CLK-04', 'CLK-05', 'CLK-06', 'CLK-07', 'CLK-08', 'CLK-17', 'CLK-16',
 ];

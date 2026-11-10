@@ -12,6 +12,7 @@
     "test": "vitest run",
     "db:bootstrap": "tsx scripts/db-bootstrap.ts",
     "db:migrate": "tsx packages/db/src/migrate-cli.ts",
+    "db:migrate-test": "tsx packages/db/src/migrate-cli.ts --test",
     "db:reset-test": "tsx scripts/db-reset-test.ts",
     "seed": "tsx scripts/seed-synthetic.ts",
     "golden-verify": "tsx scripts/golden-verify.ts",

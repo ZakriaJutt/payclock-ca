@@ -1,0 +1,14 @@
+{
+  "name": "@payclock/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.7",
+    "pg": "^8.16.3",
+    "@payclock/platform": "0.1.0"
+  }
+}

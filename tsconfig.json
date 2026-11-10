@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["packages/*/src", "packages/*/test", "packages/*/golden", "apps/*/src", "apps/*/test", "scripts", "vitest.config.ts"]
+  "include": ["tests", "packages/*/src", "packages/*/test", "packages/*/golden", "apps/*/src", "apps/*/test", "scripts", "vitest.config.ts"]
 }

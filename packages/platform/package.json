@@ -1,0 +1,13 @@
+{
+  "name": "@payclock/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "pg-boss": "^10.4.2",
+    "zod": "^3.25.76"
+  }
+}

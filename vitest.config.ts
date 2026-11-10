@@ -7,7 +7,8 @@ export default defineConfig({
       {
         test: {
           name: 'integration',
-          include: ['packages/db/test/**/*.test.ts', 'packages/domain/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
+          globalSetup: ['tests/global-setup.ts'],
+          include: ['tests/**/*.test.ts', 'packages/db/test/**/*.test.ts', 'packages/domain/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },
           testTimeout: 30_000,
