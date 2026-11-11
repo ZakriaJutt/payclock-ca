@@ -96,7 +96,7 @@ Common acceptance checks for every screen: tenant from session only; a role outs
 - Story: as a member I see every clock on one invoice, what starts it and what is missing.
 - Visible: header (amount, holdback, contractor, rule version); the governing due date CLK-17 first, with its path in words ("owner has not paid: 35 days from the contractor's invoice to the owner", "suspended by a notice of non-payment given in time", "disputed by notice"); a timeline of clocks grouped as Payment, Notices to watch, Your rights, Holdback; lien dates as two cards when work continued after substantial performance; "no later than" before any provisional rights date; per clock: date, act-by, trigger event with certainty and evidence link, section reference, state, flags; events list; actions list with stale marks.
 - Actions: add or correct an event (S-08); generate a template (S-10); record a payment; open history.
-- Checks: with EV-01 and EV-04 unknown, CLK-17 reads "not computable" with a "Request the date" action, while CLK-09 and CLK-11 still show dates; an invoice under a timely Form 1.2 or 1.3 is never shown as overdue; no clock is shown without its trigger.
+- Checks: with EV-01 unknown, no clock that counts from EV-01 shows a date; with EV-01 and EV-04 unknown, CLK-17 reads "not computable: confirm the GC's proper-invoice date" with two actions, "Draft the request" (EV-01 date request, S-10) and "Record the reply" (EV-01 in S-08) (`UT-20`), while CLK-09 and CLK-11 still show dates; an invoice under a timely Form 1.2 or 1.3 is never shown as overdue; no clock is shown without its trigger.
 
 ### S-08 Event editor
 - Story: as a member I add or correct a fact, with my reason, so that the record shows why dates moved.

@@ -42,7 +42,15 @@ describe('core path: events, deadlines, corrections (T-4.1.1, T-4.2.1, T-4.2.2, 
       const r = await addEvent(tx, A.member, { scope_type: 'subcontract', scope_id: subcontractId, type: 'EV-07', occurred_on: '2026-09-30', certainty: 'confirmed' });
       ev07Id = r.event.id;
     });
-    expect(await current('CLK-17')).toMatchObject({ state: 'not_computable', path: 'H', missing_facts: ['EV-01'], label: 'not computable' });
+    // C1 item 1 (UT-20): no 35-day date; the next step is to confirm EV-01, draft the request, record the reply.
+    const due = await current('CLK-17');
+    expect(due).toMatchObject({
+      state: 'not_computable', path: 'H', missing_facts: ['EV-01'], statutory_date: null,
+      label: "not computable: confirm the GC's proper-invoice date",
+      next_step: { template_code: 'ev01_date_request', record_reply: { method: 'POST', path: '/api/v1/events', event_type: 'EV-01' } },
+    });
+    expect(due.notes.join(' ')).toMatch(/Confirm the date the contractor gave its proper invoice to the owner/);
+    expect(await current('CLK-04')).toMatchObject({ statutory_date: null, next_step: { template_code: 'ev01_date_request' } });
     expect(await current('CLK-09', 'b')).toMatchObject({ state: 'computed', statutory_date: '2026-11-29', act_by_date: '2026-11-19' });
   });
 

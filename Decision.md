@@ -61,10 +61,10 @@ What each site showed on 2026-11-10 (public pages only; the author did not creat
 | Free without an account | None seen | Six tools: payment deadline calculator, proper-invoice checklist, payment chain explorer, contract payment review, payment timeline builder, holdback worksheet ("Your entries stay in your browser"); guides and lessons |
 | Association and educator material | None seen | "For associations & educators": free teaching notes, a 30-minute session outline, offer of an education session |
 | Payment clock stated | "your GC must pay within 28 days"; tracks "submitted date, statutory due date" | 28, 14, 7, 35 (42 at the next tier), 21, 90, 30, 15 days with section references |
-| Notices of non-payment | Not mentioned | Wizard; Forms under O. Reg. 303/18; upload of received notices; delivery record |
-| Adjudication | Not mentioned | Case record, timetable, AI-assisted submissions |
+| Notices | "Generate legal notices in one click" (the page does not name which notices); notices of non-payment (Forms 1.2, 1.3) received by the sub are not mentioned (re-read 2026-11-11) | Wizard; Forms under O. Reg. 303/18; upload of received notices; delivery record. Starter (CAD 59, 49 billed annually) includes "unlimited ... notices" and "statutory declarations" (pricing page, 2026-11-11) |
+| Adjudication | Not mentioned | Case record, timetable; an AI adjudication assistant is included on every plan, Starter too (pricing page, 2026-11-11) |
 | Holdback | Amount per pay application | Ledger, lien-window dates, annual release under s. 26 |
-| Lien | 60 days "from last work"; "legal notices in one click" | 60 days from the earliest applicable trigger |
+| Lien | "Lien rights engine": "Calculates your 60-day lien deadline and warns you before it expires"; 60 days "from last work" | 60 days from the earliest applicable trigger |
 | Documents | "CCDC-standard payment applications and Ontario-compliant legal documents, pre-filled" | Invoices, notices, CCDC 9A/9B statutory declarations |
 | Reminders | Emails the general contractor at day -7, 0, +3, +14 automatically | Reminders, calendar feed, workflows |
 | Corrections and audit | Not mentioned | "Hash-chained audit trail"; "Every deadline recomputed daily" |
@@ -79,7 +79,9 @@ Like-for-like price for the brief's buyer (CAD 1M-15M revenue `[C]`), monthly bi
 |---|---|---|---|
 | 1 | **EV-01 unknown**: the subcontractor does not know when the contractor gave the proper invoice to the owner, so the governing due date `CLK-17` cannot be fixed | PaySub's page speaks of 28 days and a "submitted date"; the author infers, without having used the product, that it counts from the subcontractor's own submission, which is not the statutory trigger at subcontract level. Tiercord Learn says a subcontractor's own invoice date "is not a universal substitute"; its free calculator starts from a confirmed owner-level date. How a payee without that date proceeds is not shown | `T-0.1.4`: founder runs both trials with one synthetic subcontract; `T-0.2.3`: share of real open invoices with EV-01 unknown |
 | 2 | **Applicability unknown**: the prime contract date and procurement start decide whether Part I.1 applies at all (s. 87.3(4)), and the subcontractor often lacks both | Neither site shows how a payee obtains or records them. Partly answered by the Act itself: a lien holder may require the contract date and the procurement start from the owner or contractor within 21 days (s. 39(1) para. 1.i) `[S: SRC-01]`; the gap is knowing to ask | Same two tasks |
-| 3 | **Silent non-payment and the unkept undertaking**: day 35 passes with no payment and no Form 1.2 or 1.3; or a Form 1.2 arrives and the contractor does not refer the matter to adjudication within 21 days | PaySub does not mention notices; Tiercord lists the 21 days, but payee-side monitoring is not shown | Same two tasks |
+| 3 | **Silent non-payment and the unkept undertaking**: day 35 passes with no payment and no Form 1.2 or 1.3; or a Form 1.2 arrives and the contractor does not refer the matter to adjudication within 21 days | PaySub generates "legal notices in one click" and emails the general contractor at day -7, 0, +3 and +14 automatically, but its page does not mention notices of non-payment the sub receives or the 21-day undertaking. Tiercord includes notices on every plan, lets the user upload received notices and lists the 21 days; whether it watches the undertaking for a payee is not shown | Same two tasks |
+
+**What this gap claim is, stated plainly (C1, 2026-11-11).** Both competitors advertise lien deadlines, notice or document generation and reminders. PaySub advertises a lien rights engine, one-click legal notices and automated reminders to the general contractor. Tiercord's Starter plan includes unlimited notices and declarations and an AI adjudication assistant. Earlier wording in this repository that PaySub "does not mention notices" was wrong and is corrected above. What is left is a hypothesis about one input, not about missing features: neither public page shows what happens for a payee who does not know EV-01 (candidate 1) or the applicability dates (candidate 2). The products may handle this inside; nobody has run a trial (`T-0.1.4`). If either does, there is no gap on candidate 1, and gate G0 applies.
 
 Two non-feature differences were claimed in the first draft and are weaker than stated:
 
@@ -133,7 +135,7 @@ Each event is its own type. No event may stand in for another; in particular the
 | CLK-07 | Sub pays sub-sub after being paid | EV-06 | no later than 7 days after | 6.6(1), (2), (5)(a) |
 | CLK-08 | Sub pays sub-sub when unpaid; sub's own Form 1.4 or 1.5 | EV-01: 42 days after; notice 7 days after EV-05 or, if none, before day 42 | 6.6(5)(b), (8) |
 | CLK-09 | Lien preservation (sub is "any other person"), two variants, section 4.2.2 | see 4.2.2 | 60-day period next following | 31(3), (4), (6), (7) |
-| CLK-10 | Lien perfection | the last day on which the lien could have been preserved under s. 31 (the un-extended CLK-09 day, pending L-09) | 90-day period next following | 36(2) |
+| CLK-10 | Lien perfection | the last day on which the lien could have been preserved under s. 31 (the un-extended CLK-09 day, pending L-09); never last supply, an invoice or any other event directly (`UT-21`) | expires unless perfected before the end of the 90-day period next following that day | 36(2) |
 | CLK-11 | Notice of adjudication on a subcontract | earliest of EV-09, EV-17, EV-10, EV-07. **EV-18 is never the trigger**; with EV-17 unknown it sets only a "no later than" ceiling (4.2.2) | not more than 90 days after | 13.5(3), (3.1) |
 | CLK-12 | Adjudication steps: documents 5 days after appointment (13.11); determination 30 days after documents, extendable (13.13); payment 15 days after the determination is communicated (13.19(2)); court filing within 2 years (13.20(2)) | EV-15 | as listed | Part II.1 |
 | CLK-13 | Annual holdback: owner publishes Form 6 within 14 days after each contract anniversary; owner pays at least 60 and not later than 74 days after publication | EV-11, EV-13 | as listed | 26(2)-(4) |
@@ -155,7 +157,7 @@ Evaluated per invoice and, where a payment or notice covers only part, per amoun
 | E | Form 1.3 given in time for an amount (contractor disputes the sub's entitlement) | No due date for the noticed amount: "disputed by notice" (6.5(6)). Any amount not noticed follows A to C | Not overdue; no interest computed; flag L-05 |
 | F | A Form 1.2 or 1.3 given late, or whose day given is unknown and whose receipt is after the CLK-05 date | Computed as A to C, state `provisional`, flag L-05. PayClock does not decide validity | Overdue shown as "subject to L-05"; interest statement blocked |
 | G | EV-04 known, EV-01 unknown | "No later than EV-04 + 7", `provisional`: if the owner paid late, path C gives an earlier day that cannot be computed | Not marked overdue before EV-04 + 7 |
-| H | Neither EV-01 nor EV-04 known | `not_computable`, missing fact EV-01 | None |
+| H | Neither EV-01 nor EV-04 known | `not_computable`, missing fact EV-01. No 35-day date is shown. The output is "confirm the GC's proper-invoice date", the EV-01 date request draft (template MH-08) and the EV-01 event form to record the reply (`UT-20`) | None |
 
 Overdue is true only when CLK-17 is `computed`, an amount remains unpaid, and today is after the CLK-17 date (extended past a holiday). CLK-16 exists only then. Unit tests `UT-17` to `UT-19`.
 
@@ -178,6 +180,18 @@ Points the brief or the chat had differently, recorded as departures:
 2. The 14-day notice is given by the owner, not sent by the sub. The sub *receives* Form 1.2 or 1.3. The brief's "notice of intention" template `[C]` is not among the forms in O. Reg. 303/18 `[S: SRC-02]` and is dropped.
 3. Section 6.6(10) lets a sub "who is required to make payments" ask the contractor for the EV-01 date. A sub with no sub-subs has no such express right; s. 39(1) gives a lien holder a state of accounts, the contract date and the procurement start within 21 days `[S: SRC-01]`. Which request fits is a lawyer question (section 6).
 4. Since 2026-01-01 an invoice is deemed proper unless the owner notifies the deficiency within 7 days (s. 6.1(2)) `[S: SRC-01]`; the brief did not record this.
+
+#### 4.2.3 Expected outputs for three common situations (C1, `UT-20` to `UT-22`)
+
+Synthetic facts: prime contract 2026-02-10, procurement start 2025-11-03, invoice CAD 48,000 with CAD 4,800 holdback (net CAD 43,200).
+
+| Situation | Facts | Expected output |
+|---|---|---|
+| Missing upstream date | EV-01 unknown or not recorded; EV-07 2026-09-18 | CLK-04, CLK-05, CLK-08, CLK-16, CLK-17 `not_computable`, missing EV-01, no date. Each shows "confirm the GC's proper-invoice date", the EV-01 date request draft and the place to record the reply (EV-01 event). CLK-09b 2026-11-17 and CLK-11 2026-12-17 still compute |
+| Partial payment | EV-01 and EV-02 2026-10-08; owner pays CAD 25,920 on 2026-11-02 (within time) | Two CLK-17 portions: CAD 25,920 due 2026-11-09 (path B, 6.5(2)); CAD 17,280 due 2026-11-12 (path C, EV-01 + 35) |
+| Partial payment, EV-01 unknown | Same payment, EV-01 unknown | CAD 25,920 "no later than 2026-11-09" (path G, `provisional`); CAD 17,280 `not_computable` with the EV-01 request (path H) |
+| Notice of non-payment received, EV-01 known | Form 1.2 given 2026-10-28, received 2026-10-29; EV-01 2026-10-08 | Given before CLK-05 (2026-11-12): CLK-17 "suspended by notice" (path D), not overdue, no interest; CLK-06 (adjudication undertaking) 2026-11-18 |
+| Notice of non-payment received, EV-01 unknown | Same notice; EV-01 unknown | Timeliness cannot be decided: CLK-17 `not_computable`, flag L-05, EV-01 request; CLK-06 2026-11-18 still computes from the day given |
 
 ### 4.3 Counting rule `[S: SRC-04]`
 
@@ -354,7 +368,9 @@ The chat's funnel `[C]`: 300 -> 21 -> 9-10 demos -> 2-3 customers (reply 7%, mee
 
 Paying accounts per prospect: 0.07 x 0.45 x 0.25 x 0.60 = 0.004725. Cash check on CAC: CAD 450 of lead cost per 300 prospects / 1.4175 = 317; the brief's 350 is used.
 
-**Distinct reachable prospects: unknown.** No member count was found on the association pages opened (`SRC-12`); a search summary of "over 500" ECAO firms (2022) is secondary and unconfirmed. The CASL position in section 6 shrinks the emailable pool to firms with a conspicuously published address. `T-0.1.1` counts the list. What the arithmetic requires:
+**Market size (counted, not reachable).** Statistics Canada table 33-10-1174-01, June 2026 (`SRC-18`): Ontario has 4,516 locations with 5-49 employees in NAICS 238210 (electrical, 2,166) and 238220 (plumbing, heating and air-conditioning, 2,350); with 5-99 employees, 4,802. These are statistical locations (establishments), not firms, and include residential-only contractors. MCA Ontario says it represents "nearly 300 dedicated professionals and member companies" (undated; people and firms mixed). ECAO publishes no member count on the pages opened (`SRC-12`, 2026-11-11).
+
+**Distinct reachable prospects: unknown.** The 4,516 is an upper bound on the target trades, not a list. A search summary of "over 500" ECAO firms (2022) is secondary and unconfirmed. The CASL position in section 6 shrinks the emailable pool to firms with a conspicuously published address. `T-0.1.1` counts the list. What the arithmetic requires:
 
 | Target | Prospects needed |
 |---|---|
@@ -404,17 +420,19 @@ A sub with CAD 3M revenue and receivables at 67 days: collecting 10 days sooner 
 
 **Message (synthetic).** Bracketed items are filled per prospect; the footer is on every message.
 
-> Subject: the 35-day date on your [Company] invoices
+> Subject: which of your [Company] invoices can be dated under the Construction Act
 >
 > Hi [Name], under Ontario's Construction Act your general contractor has 7 days to pay you after the owner pays it on time, and otherwise 35 days from the day it invoiced the owner, unless it gives you a notice of non-payment. You may not be able to date either from your own records, because both start from events at the contractor's level.
 >
-> I am preparing, by hand, a free dated schedule for 20 Ontario electrical and mechanical subs: each open invoice with the date it becomes overdue under the Act, the last days for adjudication and lien steps, and which facts are missing to work them out. I would need your aging list and whatever you know, per project, of: when the prime contract was signed, when your GC billed the owner, and your last day on site. "Not known" is a useful answer. If the schedule helps, a 30-day pilot is CAD 99: I keep it current and email you each week. Dates and templates only, not legal advice; your lawyer decides any lien or adjudication step.
+> I am preparing, by hand, a free schedule for 20 Ontario electrical and mechanical subs. For each open invoice it gives the date it becomes overdue under the Act where your facts allow it. Where they do not, it says which fact is missing and gives a wording to ask your GC for it. It also gives the last days for adjudication and lien steps that can be worked out from your facts. I would need your aging list and whatever you know, per project, of: when the prime contract was signed, when your GC billed the owner, and your last day on site. "Not known" is a useful answer. If the schedule helps, a 30-day pilot is CAD 99: I keep it current and email you each week. Dates and templates only, not legal advice; your lawyer decides any lien or adjudication step.
 >
 > [Sender name], [business name], [mailing address], [phone], [email]. You are receiving this because [Company]'s address is published at [page]. Reply "unsubscribe" or use [link] and I will not email you again.
 
 > Follow-up: Hi [Name], one detail from my note: if your GC has not told you when it billed the owner, the statutory due date on your invoice may not be something you, or any software, can work out yet. The free schedule shows which of your invoices are in that position and a wording you can use to ask. Aging list and what you know of the prime contract dates are all I need. Worth 20 minutes this week?
 >
 > [Sender name], [business name], [mailing address], [phone], [email]. Reply "unsubscribe" or use [link] and I will not email you again.
+
+**Wording rule (C1, 2026-11-11).** No message, page or email promises what an unknown input can defeat: not "know the 35-day date on every invoice" and not "never miss a lien or adjudication deadline". The product dates a clock only when its starting fact is recorded. Otherwise it names the missing fact and offers the request. Rights dates can still be earlier than shown when a trigger is unknown ("no later than"). Say that.
 
 **Discovery questions** `[C]`: How many invoices are over 45 days right now and what is the total? Who tracks lien and holdback dates and where? Have you ever missed a lien deadline or written off an invoice? Have you used adjudication or sent a formal notice in the last two years? What did your last lawyer letter cost and how long did it take? Added `[P]`: Do you know when your GC bills the owner for your work? Would you send your GC a dated reminder or a request for that date (gate G1c)? Do you use Tiercord, PaySub or their free tools?
 
@@ -488,10 +506,14 @@ So roughly one time in three the full set stops a business that meets every assu
 | 4 | Launch at a single CAD 99 plan (section 7) or on the three tiers | `T-0.3.1` |
 | 5 | Where the VPS is located; if not in Canada, use `AD-09` hosting | `T-2.1.4` |
 | 6 | Name the Checker: a team member other than the person who computes the dates. With a team of one, Phase 0 reports cannot start | `T-0.1.2` |
+| 7 | `[P]` (C1): the pool used in section 8.4 ("a pool of 1,500" `[A]`) is unchanged. StatCan gives 4,516 Ontario locations in the two trades with 5-49 employees as an upper bound, not a reachable list. Keep 1,500 until `T-0.1.1` counts the list, or restate it now | `T-0.1.1` |
+| 8 | `[P]` (C1): with PaySub and Tiercord both advertising notices and lien deadlines, the gap is one unverified hypothesis (EV-01 unknown, section 3). Confirm that `T-0.1.4` runs before any outreach | Before `T-0.2.1` |
 
 ## 13. Sources and assumptions
 
-Date consulted for every row: 2026-11-10.
+Date consulted for every row: 2026-11-10, except where a row gives 2026-11-11.
+
+C1 re-checks on 2026-11-11: SRC-01 s. 36(2) re-read on the rendered e-Laws page (currency date 6 November 2026); SRC-05 https://paysub.ca re-opened (lien rights engine, "Generate legal notices in one click", GC emails at day -7, 0, +3, +14, Solo CAD 29, Business CAD 59, no page date); SRC-06 https://tiercord.ca/pricing re-opened (Starter CAD 59, CAD 49 billed annually, up to CAD 1M billed a year; all plans include all capabilities, "unlimited ... notices" and statutory declarations, and AI adjudication assistance; no page date).
 
 | ID | Source | Jurisdiction | Scope used | Access |
 |---|---|---|---|---|
@@ -506,7 +528,8 @@ Date consulted for every row: 2026-11-10.
 | SRC-09 | OWASP ASVS 5.0.0, requirement list. https://github.com/OWASP/ASVS/tree/v5.0.0 | n/a | Requirements cited in TRD | Open |
 | SRC-10 | WCAG 2.2. https://www.w3.org/TR/WCAG22/ | n/a | Criteria cited in design | Open |
 | SRC-11 | ODACC annual report page. https://odacc.ca/en/annual-report/ | Ontario | None | Page opened; the 2026 report PDF could not be read as text here. No figure used |
-| SRC-12 | ECAO, MCA Ontario, TCA sites. https://www.ecao.org/ | Ontario | Member count sought | No count found on pages opened |
+| SRC-12 | ECAO, MCA Ontario, TCA sites. https://www.ecao.org/ , https://ecao.org/about/ , https://www.mcao.org/ | Ontario | Member count sought | Re-opened 2026-11-11: ECAO states no count; MCAO: "nearly 300 dedicated professionals and member companies" (undated) |
+| SRC-18 | Statistics Canada, table 33-10-1174-01, "Canadian Business Counts, with employees, June 2026" (released 2026-08-14). https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3310117401 ; CSV https://www150.statcan.gc.ca/n1/tbl/csv/33101174-eng.zip | Ontario | NAICS 238210 and 238220 by employment size | Consulted 2026-11-11: full CSV downloaded and Ontario rows read. Counts are locations, not firms |
 | SRC-13 | Sources in the brief's research record (Osler, BC government, BCCA, Levelset, Siteline, Knowify) | Mixed | As quoted, with the brief's status | Not reopened by the author |
 | SRC-14 | Courts of Justice Act, R.S.O. 1990, c. C.43, ss. 127-128. https://www.ontario.ca/laws/statute/90c43 | Ontario | Definition of prejudgment interest rate; quarterly table | Open. The published rate table itself was not opened; no rate value is used |
 | SRC-15 | Canada's anti-spam legislation, S.C. 2010, c. 23, ss. 6, 10(9), 11. https://laws-lois.justice.gc.ca/eng/acts/E-1.6/ | Canada | Consent, identification, unsubscribe | Open. Regulations not read |

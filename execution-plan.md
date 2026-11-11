@@ -126,8 +126,8 @@ Entry: `T-1.1.1`, `T-2.1.1`. Owner: Rules lead. Outcome: every golden case repro
 |---|---|---|---|---|---|---|
 | T-3.1.1 | MH-04 | Rules lead | 6-8 | Civil-date arithmetic and holiday calendar | `UT-01` to `UT-04` | Date type; holiday loader; extension rule |
 | T-3.1.2 | MH-03 | Rules lead | 8-12 | Version selector and applicability | `UT-08` | Governing-date logic; unknown handling |
-| T-3.1.3 | MH-04 | Rules lead | 10-14 | CLK-01 to CLK-08 and the CLK-17 composition, paths A to H | `UT-05` to `UT-07`, `UT-17` to `UT-19` | Trigger evaluation; path table; per-amount handling; missing-fact output |
-| T-3.1.4 | MH-05 | Rules lead | 8-12 | CLK-09 variants a and b, CLK-10 to CLK-12, termination handling with distinct event types, pending-question withholding, act-by | `UT-10`, `UT-11`, `UT-15`, `UT-16` | Earliest-of; variants; in-time test for Form 8; bound; buffer |
+| T-3.1.3 | MH-04 | Rules lead | 10-14 | CLK-01 to CLK-08 and the CLK-17 composition, paths A to H | `UT-05` to `UT-07`, `UT-17` to `UT-20`, `UT-22` | Trigger evaluation; path table; per-amount handling; missing-fact output |
+| T-3.1.4 | MH-05 | Rules lead | 8-12 | CLK-09 variants a and b, CLK-10 to CLK-12, termination handling with distinct event types, pending-question withholding, act-by | `UT-10`, `UT-11`, `UT-15`, `UT-16`, `UT-21` | Earliest-of; variants; in-time test for Form 8; bound; buffer |
 | T-3.1.5 | MH-11 | Rules lead | 6-10 | CLK-13, CLK-14 and transition flag L-07 | `UT-11` | Anniversary; window; transition |
 | T-3.1.6 | MH-04 | Rules lead | 4-6 | Interest calculation with rate table | `UT-09` | Cents arithmetic; rounding |
 | T-3.1.7 | M-06 | Rules lead | 6-10 | Golden-case runner in CI | `UT-12`, `UT-13` | Loader; diff report |
@@ -263,6 +263,9 @@ Status per test: [verification-report-fixing.md section 9](verification-report-f
 | UT-18 | Same invoice and facts as UT-17; Form 1.3 given and received 2026-10-28 (day 20) for the full CAD 43,200; then for CAD 10,000 only | Path E: no due date, "disputed by notice", not overdue on 2026-11-20, no CLK-16, L-05. Partial: CAD 33,200 due 2026-11-12 under path C; CAD 10,000 path E |
 | UT-19 | Same invoice; Form 1.2 received 2026-11-13 (day 36), day given unknown, with the UT-17 late payment; then, without that payment, Form 1.2 given 2026-10-28 and owner pays that amount on 2026-12-01 | Path F: CLK-17 2026-11-12 `provisional`, L-05, interest statement refused. Path D: suspended, CLK-06 2026-11-18; after payment CLK-17 2026-12-08 |
 | UT-14 | Interest statement requested with EV-01 `estimated` | Refused with reason; reminder template allowed with non-statutory wording |
+| UT-20 | EV-01 recorded as unknown, then not recorded at all; EV-07 2026-09-18; then EV-04 2026-11-02 with EV-01 unknown | CLK-04, CLK-05, CLK-08, CLK-16, CLK-17 have no date, missing EV-01, the note "confirm the date the contractor gave its proper invoice to the owner" and actions `ev01_date_request` and `record_ev01_reply`; the API label reads "not computable: confirm the GC's proper-invoice date" with `next_step`; CLK-09b 2026-11-17 still computes. With EV-04: path G "no later than 2026-11-09" plus the same actions (Decision.md 4.2.3) |
+| UT-21 | EV-10 2026-08-31, EV-07 2026-09-30; then EV-19 2026-09-05, EV-08 2026-09-10, EV-07 2026-10-15 | CLK-09b 2026-10-30, CLK-10b 2027-01-28 (not EV-07 + 150 = 2027-02-27); CLK-09a 2026-11-09, CLK-10a 2027-02-07; CLK-09b 2026-12-14, CLK-10b 2027-03-14 (s. 36(2)) |
+| UT-22 | Partial payment CAD 25,920 on 2026-11-02 with EV-01 known, then unknown; Form 1.2 given 2026-10-28 with EV-01 known, then unknown | Paths B 2026-11-09 and C 2026-11-12; then G "no later than 2026-11-09" and H with the EV-01 request. Notice: path D, CLK-06 2026-11-18; with EV-01 unknown: CLK-17 not computable, L-05, EV-01 request, CLK-06 2026-11-18 (Decision.md 4.2.3) |
 
 ### 7.2 Integration tests (real database, fake providers)
 

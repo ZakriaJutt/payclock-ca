@@ -7,9 +7,14 @@ import type {
   RuleClock, RuleVersion, TriggerItem, TriggerSpec,
 } from './types.ts';
 
-export const ENGINE_VERSION = 'payclock-rules 0.1.0';
+export const ENGINE_VERSION = 'payclock-rules 0.1.1';
 
 const DAY_2026_01_01 = civil('2026-01-01');
+/** Shown on every payment clock that cannot be dated because EV-01 is unknown or not recorded. */
+export const EV01_CONFIRM_NOTE =
+  "Confirm the date the contractor gave its proper invoice to the owner (EV-01); no 35-day date is shown until it is recorded";
+/** Request draft (template MH-08, wording pending L-03), then record the reply as an EV-01 event. */
+export const EV01_ACTIONS = ['ev01_date_request', 'record_ev01_reply'] as const;
 export const RIGHTS_CLOCK_CODES: ReadonlySet<ClockCode> = new Set(['CLK-09', 'CLK-10', 'CLK-11']);
 const RIGHTS_CLOCKS = RIGHTS_CLOCK_CODES;
 const PAYMENT_CLOCKS: readonly ClockCode[] = [
@@ -179,8 +184,16 @@ class Engine {
       r.flags.push('REGIME_ESTIMATED');
       r.estimatedEventIds.push(...this.regime.estimatedEventIds);
     }
+    // C1 item 1: a payment clock that lacks EV-01 shows no 35-day date; what it offers instead is
+    // "confirm the contractor's proper-invoice date to the owner", the request draft, and a place
+    // to record the reply as an EV-01 event.
+    if (r.invoiceId !== null && r.missingFacts.includes('EV-01') && r.state !== 'not_applicable') {
+      r.notes.push(EV01_CONFIRM_NOTE);
+      r.suggestedActions.push(...EV01_ACTIONS);
+    }
     r.flags = uniq(r.flags).sort();
     r.missingFacts = uniq(r.missingFacts);
+    r.notes = uniq(r.notes);
     r.triggerEventIds = uniq(r.triggerEventIds).sort();
     r.estimatedEventIds = uniq(r.estimatedEventIds).sort();
     r.suggestedActions = uniq(r.suggestedActions);

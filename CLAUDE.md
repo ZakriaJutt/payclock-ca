@@ -31,12 +31,13 @@ Invoice amounts, amounts in dispute, names of general contractors and owners, no
 - Do not add a feature that sends anything to a third party.
 - Do not encode a day count from a law-firm article, a competitor's page or memory. Use the e-Laws consolidation and record the section.
 - Do not claim ASVS or WCAG conformance.
-- Do not describe PayClock as "the only" Canadian tracker; PaySub and Tiercord exist ([Decision.md section 3](Decision.md#3-competitor-gap-the-decisive-question)).
+- Do not promise what an unknown input can defeat: no "never miss a deadline", no "the 35-day date on every invoice". Say what PayClock does: dates where the facts allow, the missing fact and a request where they do not.
+- Do not describe PayClock as "the only" Canadian tracker, or say PaySub has no notices; PaySub and Tiercord exist and both advertise notices ([Decision.md section 3](Decision.md#3-competitor-gap-the-decisive-question)).
 
 ## First verification checks when implementation begins
 
 1. `UT-01` to `UT-04`: day counting, Sunday and holiday extension, Saturday not a holiday.
-2. `UT-07`: unknown upstream date gives "not computable" on payment clocks while lien and adjudication clocks still compute.
+2. `UT-07`, `UT-20`: unknown upstream date gives "not computable" on payment clocks, with "confirm the GC's proper-invoice date", the request draft and a place to record the reply, while lien and adjudication clocks still compute. `UT-21`: perfection counts from the last preservation day (s. 36(2)).
 3. `UT-08`: rule-version selection at 2018-07-01, 2019-10-01 and 2026-01-01.
 3a. `UT-15` to `UT-19`: termination against Form 8 publication, the two liens, and due-date paths A to H.
 4. `UT-12`: every Phase 0 hand-calculated invoice reproduces exactly.

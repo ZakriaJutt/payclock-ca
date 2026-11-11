@@ -60,6 +60,7 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | Civil date, add days, compare, weekday | `civil`, `addDays`, `daysBetween`, `dayOfWeek`, `minDate`, `isCivilDate` | `packages/rules/src/civil-date.ts` |
 | Holiday test and extension; holiday rows for seeding | `isHoliday`, `extendPastHolidays`, `ontarioHolidayRows` | `packages/rules/src/holidays.ts` |
 | All clock dates for one subcontract | `compute(input)` | `packages/rules/src/engine.ts` |
+| EV-01 missing: note and actions (`ev01_date_request`, `record_ev01_reply`); API `next_step` (C1) | `EV01_CONFIRM_NOTE`, `EV01_ACTIONS`; `EV01_NEXT_STEP` in `presentDeadline` | `packages/rules/src/engine.ts`; `packages/domain/src/queries.ts` |
 | Transition regime | `selectRegime` | `packages/rules/src/regime.ts` |
 | Rule versions as data; holiday changes | `RULE_VERSIONS` (loaded as `draft` revisions by `syncDraftRules`, which recomputes on any change); `changeProclaimedHoliday` | `packages/rules/src/versions.ts`, `packages/domain/src/rules-sync.ts` |
 | Overdue; interest arithmetic and the withheld statement | `overdueStatus`, `simpleInterestCents`, `interestStatement` | `packages/rules/src/overdue.ts`, `interest.ts` |

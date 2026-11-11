@@ -4,6 +4,17 @@ import { notFound, uuidField } from './errors.ts';
 
 type Deadline = typeof tables.deadline.$inferSelect;
 
+/** C1 item 1: what a payment clock without EV-01 offers instead of a 35-day date. */
+export const EV01_NEXT_STEP = {
+  ask: "Confirm the GC's proper-invoice date: the day the contractor gave its proper invoice to the owner (EV-01)",
+  template_code: 'ev01_date_request',
+  record_reply: { method: 'POST', path: '/api/v1/events', event_type: 'EV-01' },
+} as const;
+
+function nextStep(d: Deadline) {
+  return d.invoiceId !== null && d.state !== 'not_applicable' && d.missingFacts.includes('EV-01') ? EV01_NEXT_STEP : null;
+}
+
 /**
  * Public shape of a deadline: dates with their certainty, never a bare "OK". A deadline computed
  * under a rule or holiday generation older than the one in force is `recompute_pending`: its stored
@@ -16,7 +27,7 @@ export function presentDeadline(d: Deadline, stale = false) {
       state: 'recompute_pending' as const, statutory_date: null, bound: d.bound,
       label: 'recompute pending: the rules or holidays changed; no date until recomputed',
       path: null, act_by_date: null, window_end_date: null, amount_cents: d.amountCents,
-      missing_facts: [], flags: d.flags, withheld: d.withheld,
+      missing_facts: [], next_step: null, flags: d.flags, withheld: d.withheld,
       notes: ['Computed under a superseded rule or holiday version; recomputation is queued'],
       trigger_event_ids: d.triggerEventIds, is_current: d.isCurrent, computation_run_id: d.computationRunId,
     };
@@ -29,12 +40,16 @@ export function presentDeadline(d: Deadline, stale = false) {
     state: d.state,
     statutory_date: d.statutoryDate,
     bound: d.bound,
-    label: d.statutoryDate ? `${d.bound === 'no_later_than' ? 'no later than ' : ''}${d.statutoryDate}` : d.state === 'not_applicable' ? 'not applicable' : 'not computable',
+    label: d.statutoryDate
+      ? `${d.bound === 'no_later_than' ? 'no later than ' : ''}${d.statutoryDate}`
+      : d.state === 'not_applicable' ? 'not applicable'
+      : nextStep(d) ? "not computable: confirm the GC's proper-invoice date" : 'not computable',
     path: d.path,
     act_by_date: d.actByDate,
     window_end_date: d.windowEndDate,
     amount_cents: d.amountCents,
     missing_facts: d.missingFacts,
+    next_step: nextStep(d),
     flags: d.flags,
     withheld: d.withheld,
     notes: d.notes,

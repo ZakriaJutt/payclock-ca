@@ -94,7 +94,7 @@ All mutating calls require `Idempotency-Key`; all responses carry `X-Correlation
 | `POST /billing/checkout-session` | owner | Start hosted checkout for the launch plan | 200 with redirect address |
 | `POST /webhooks/stripe` | none (signature verified) | Subscription and invoice events | 200 always after verification; 400 on bad signature |
 | `GET /invoices?sort=next_act_by&cursor=` | all tenant roles | Dashboard list | 200, cursor pagination |
-| `GET /invoices/{id}` | all tenant roles | Invoice, events, current deadlines, flags | 404 for other tenants |
+| `GET /invoices/{id}` | all tenant roles | Invoice, events, current deadlines, flags. A payment deadline missing EV-01 carries `label` "not computable: confirm the GC's proper-invoice date" and `next_step` {ask, `template_code` `ev01_date_request`, `record_reply` `POST /api/v1/events` with `EV-01`} (C1, `UT-20`) | 404 for other tenants |
 | `POST /events` | owner, member | Add event `{scope, type, occurred_on or null, certainty, document_id?}` | 201 with `recomputation_id` |
 | `POST /events/{id}/corrections` | owner, member | Correct `{occurred_on or null, certainty, reason, expected_version}` | 200 with `recomputation_id`; 409 if `expected_version` is stale; 422 if reason empty |
 | `GET /recomputations/{id}` | all tenant roles | Diff of deadlines | 200 |
