@@ -4,8 +4,23 @@ import { notFound, uuidField } from './errors.ts';
 
 type Deadline = typeof tables.deadline.$inferSelect;
 
-/** Public shape of a deadline: dates with their certainty, never a bare "OK". */
-export function presentDeadline(d: Deadline) {
+/**
+ * Public shape of a deadline: dates with their certainty, never a bare "OK". A deadline computed
+ * under a rule or holiday generation older than the one in force is `recompute_pending`: its stored
+ * date is not presented at all until the recompute has run (B1-005).
+ */
+export function presentDeadline(d: Deadline, stale = false) {
+  if (stale) {
+    return {
+      id: d.id, clock: d.clockCode, variant: d.variant, invoice_id: d.invoiceId,
+      state: 'recompute_pending' as const, statutory_date: null, bound: d.bound,
+      label: 'recompute pending: the rules or holidays changed; no date until recomputed',
+      path: null, act_by_date: null, window_end_date: null, amount_cents: d.amountCents,
+      missing_facts: [], flags: d.flags, withheld: d.withheld,
+      notes: ['Computed under a superseded rule or holiday version; recomputation is queued'],
+      trigger_event_ids: d.triggerEventIds, is_current: d.isCurrent, computation_run_id: d.computationRunId,
+    };
+  }
   return {
     id: d.id,
     clock: d.clockCode,
@@ -44,6 +59,7 @@ export async function getInvoice(tx: Tx, actor: Actor, invoiceId: string) {
     .from(tables.deadline)
     .where(and(eq(tables.deadline.subcontractId, inv.subcontractId), eq(tables.deadline.isCurrent, true)));
   const relevant = deadlines.filter((d) => d.invoiceId === null || d.invoiceId === inv.id);
+  const stale = await staleRunIds(tx, relevant.map((d) => d.computationRunId));
   return {
     invoice: { id: inv.id, number: inv.number, amount_cents: inv.amountCents, holdback_cents: inv.holdbackCents, status: inv.status, fact_version: inv.factVersion, subcontract_id: inv.subcontractId },
     events: events
@@ -55,7 +71,7 @@ export async function getInvoice(tx: Tx, actor: Actor, invoiceId: string) {
       })),
     deadlines: relevant
       .sort((a, b) => `${a.clockCode}${a.variant}`.localeCompare(`${b.clockCode}${b.variant}`))
-      .map(presentDeadline),
+      .map((d) => presentDeadline(d, stale.has(d.computationRunId))),
   };
 }
 
@@ -90,8 +106,21 @@ export async function getRecomputation(tx: Tx, actor: Actor, runId: string) {
     };
   });
   changes.sort((a, b) => rank(a) - rank(b) || `${a.clock}${a.variant}`.localeCompare(`${b.clock}${b.variant}`));
+  const superseded = (await staleRunIds(tx, [run.id])).has(run.id);
   return {
-    id: run.id, cause: run.cause, cause_event_id: run.causeEventId, created_by: run.createdBy, created_at: run.createdAt,
+    id: run.id, cause: run.cause, computed_under_superseded_rules: superseded, cause_event_id: run.causeEventId, created_by: run.createdBy, created_at: run.createdAt,
     fact_version_read: run.factVersionRead, engine_version: run.engineVersion, status: run.status, changes,
   };
+}
+
+/** Runs whose rule or holiday generation is older than the one in force. */
+export async function staleRunIds(tx: Tx, runIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(runIds)];
+  if (!ids.length) return new Set();
+  const r = await tx.raw.query<{ id: string }>(
+    `select c.id from computation_run c cross join rules_generation g
+     where g.jurisdiction = 'ON' and c.id = any($1) and (c.rules_gen < g.rules_gen or c.holiday_gen < g.holiday_gen)`,
+    [ids],
+  );
+  return new Set(r.rows.map((x) => x.id));
 }

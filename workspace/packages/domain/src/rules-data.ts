@@ -7,10 +7,24 @@ export interface LoadedRules {
   clockIds: Map<string, string>;
   holidays: CivilDate[];
   holidayYears: number[];
+  /** Rule and holiday generation in force when these rules were read (B1-005). */
+  gens: Gens;
+}
+
+export interface Gens {
+  rulesGen: number;
+  holidayGen: number;
+}
+
+export async function currentGens(tx: Tx): Promise<Gens> {
+  const [g] = await tx.select().from(tables.rulesGeneration).where(eq(tables.rulesGeneration.jurisdiction, 'ON'));
+  if (!g) throw new Error('rules_generation row missing');
+  return { rulesGen: g.rulesGen, holidayGen: g.holidayGen };
 }
 
 /** Rule versions and holidays as data from the database (AD-03); the engine receives them as input. */
 export async function loadRules(tx: Tx): Promise<LoadedRules> {
+  const gens = await currentGens(tx);
   const versions = await tx.select().from(tables.ruleVersion).where(and(eq(tables.ruleVersion.jurisdiction, 'ON'), ne(tables.ruleVersion.status, 'retired'))).orderBy(asc(tables.ruleVersion.effectiveFrom));
   const clocks = await tx.select().from(tables.ruleClock);
   const holidays = await tx.select({ day: tables.holiday.day }).from(tables.holiday).where(eq(tables.holiday.jurisdiction, 'ON'));
@@ -45,5 +59,5 @@ export async function loadRules(tx: Tx): Promise<LoadedRules> {
       })
       .sort((a, b) => `${a.clockCode}${a.variant}`.localeCompare(`${b.clockCode}${b.variant}`)),
   }));
-  return { versions: out, clockIds, holidays: holidays.map((h) => civil(h.day)).sort(), holidayYears: coverage.map((c) => c.year).sort((a, b) => a - b) };
+  return { versions: out, clockIds, holidays: holidays.map((h) => civil(h.day)).sort(), holidayYears: coverage.map((c) => c.year).sort((a, b) => a - b), gens };
 }

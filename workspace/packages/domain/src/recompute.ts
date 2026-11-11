@@ -6,7 +6,7 @@ import {
 } from '@payclock/rules';
 import type { Actor } from './actor.ts';
 import { audit } from './audit.ts';
-import { loadRules } from './rules-data.ts';
+import { loadRules, type Gens } from './rules-data.ts';
 
 type Cause = 'new_event' | 'correction' | 'rule_version' | 'holiday_table' | 'import';
 
@@ -133,6 +133,7 @@ export async function writeComputation(
   factVersionRead: number,
   clockIds: Map<string, string>,
   correlationId: string,
+  gens: Gens,
 ): Promise<RecomputeResult> {
   const runHash = sha256Hex(computed.map((c) => `${c.subcontractId}:${c.inputsHash}`).sort().join(','));
   const [run] = await tx
@@ -148,6 +149,8 @@ export async function writeComputation(
       engineVersion: ENGINE_VERSION,
       status: 'succeeded',
       createdBy: actor?.userId ?? null,
+      rulesGen: gens.rulesGen,
+      holidayGen: gens.holidayGen,
     })
     .returning({ id: tables.computationRun.id });
   const runId = run!.id;
@@ -230,5 +233,5 @@ export async function recomputeInTx(tx: Tx, actor: Actor, req: RecomputeRequest)
   const facts = await loadProjectFacts(tx, req.projectId);
   const rules = await loadRules(tx);
   const computed = computeProject(facts!, rules, req.subcontractIds);
-  return writeComputation(tx, actor, actor.tenantId, req, computed, factVersion, rules.clockIds, actor.correlationId);
+  return writeComputation(tx, actor, actor.tenantId, req, computed, factVersion, rules.clockIds, actor.correlationId, rules.gens);
 }

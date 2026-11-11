@@ -257,6 +257,8 @@ export const computationRun = pgTable('computation_run', {
   engineVersion: text('engine_version').notNull(),
   status: runStatus('status').notNull(),
   createdBy: uuid('created_by'),
+  rulesGen: integer('rules_gen').notNull().default(0),
+  holidayGen: integer('holiday_gen').notNull().default(0),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   foreignKey({ name: 'computation_run_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),
@@ -373,3 +375,27 @@ export const apiIdempotency = pgTable('api_idempotency', {
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   foreignKey({ name: 'api_idempotency_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),unique('api_idempotency_key').on(t.tenantId, t.idempotencyKey), tenantPolicy('api_idempotency')]).enableRLS();
+
+export const rulesGeneration = pgTable('rules_generation', {
+  jurisdiction: text('jurisdiction').primaryKey(),
+  rulesGen: integer('rules_gen').notNull(),
+  holidayGen: integer('holiday_gen').notNull(),
+  changedAt: ts('changed_at').notNull().defaultNow(),
+});
+
+export const recomputePending = pgTable('recompute_pending', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  cause: runCause('cause').notNull(),
+  rulesGen: integer('rules_gen').notNull(),
+  holidayGen: integer('holiday_gen').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  doneAt: ts('done_at'),
+}, (t) => [
+  foreignKey({ name: 'recompute_pending_project_fk', columns: [t.tenantId, t.projectId], foreignColumns: [project.tenantId, project.id] }),
+  uniqueIndex('recompute_pending_open_idx').on(t.projectId).where(sql`done_at is null`),
+  index('recompute_pending_queue_idx').on(t.createdAt).where(sql`done_at is null`),
+]);

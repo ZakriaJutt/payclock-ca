@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { tables, type TenantDb } from '@payclock/db';
 import { canonicalJson, HOLIDAY_SOURCE, ontarioHolidayRows, RULE_VERSIONS, sha256Hex, type RuleVersion } from '@payclock/rules';
-import { recomputeBatch } from './batch.ts';
+import { drainPending, enqueueAllProjects, enqueueStale, type DrainReport } from './pending.ts';
 
 /** Years the holiday table is loaded for: every year a seeded version can count in, with margin. */
 export const HOLIDAY_YEARS: readonly number[] = Array.from({ length: 23 }, (_, i) => 2018 + i); // 2018-2040
@@ -11,7 +11,9 @@ export interface SyncReport {
   approvedDiffering: string[];
   holidaysAdded: number;
   holidaysRemoved: number;
-  recompute: { projects: number; written: number; unchanged: number; failed: string[] };
+  /** Projects queued in the change's own transaction, plus stale ones found by the scan. */
+  enqueued: number;
+  recompute: DrainReport;
 }
 
 function contentHash(v: RuleVersion): string {
@@ -31,7 +33,7 @@ function contentHash(v: RuleVersion): string {
  */
 export async function syncDraftRules(admin: TenantDb, holidayYears: readonly number[] = HOLIDAY_YEARS, opts: { app?: TenantDb } = {}): Promise<SyncReport> {
   const correlationId = randomUUID();
-  const report: SyncReport = { newRevisions: [], approvedDiffering: [], holidaysAdded: 0, holidaysRemoved: 0, recompute: { projects: 0, written: 0, unchanged: 0, failed: [] } };
+  const report: SyncReport = { newRevisions: [], approvedDiffering: [], holidaysAdded: 0, holidaysRemoved: 0, enqueued: 0, recompute: { done: 0, failed: [], remaining: 0 } };
   await admin.withGlobalWrite(async (tx) => {
     for (const v of RULE_VERSIONS) {
       const hash = contentHash(v);
@@ -85,6 +87,18 @@ export async function syncDraftRules(admin: TenantDb, holidayYears: readonly num
       }
       await tx.raw.query("insert into holiday_coverage (jurisdiction, year, source) values ('ON', $1, $2) on conflict do nothing", [year, HOLIDAY_SOURCE]);
     }
+    // The change, the generation bump and a pending-recompute row per project commit together.
+    const rulesChanged = report.newRevisions.length > 0;
+    const holidaysChanged = report.holidaysAdded + report.holidaysRemoved > 0;
+    if (rulesChanged || holidaysChanged) {
+      await tx.raw.query(
+        "update rules_generation set rules_gen = rules_gen + $1, holiday_gen = holiday_gen + $2, changed_at = now() where jurisdiction = 'ON'",
+        [rulesChanged ? 1 : 0, holidaysChanged ? 1 : 0],
+      );
+      report.enqueued += await enqueueAllProjects(tx, rulesChanged ? 'rule_version' : 'holiday_table');
+    }
+    // Anything left behind by an earlier failed or interrupted recompute is queued again.
+    report.enqueued += await enqueueStale(tx);
     if (report.holidaysAdded || report.holidaysRemoved) {
       await tx.raw.query(
         "insert into audit_event (tenant_id, actor_id, action, entity_type, entity_id, after_hash, correlation_id) values (null, null, 'holiday_table.change', 'holiday', null, decode($1, 'hex'), $2)",
@@ -93,28 +107,9 @@ export async function syncDraftRules(admin: TenantDb, holidayYears: readonly num
     }
   });
 
-  if (report.newRevisions.length || report.holidaysAdded || report.holidaysRemoved) {
-    report.recompute = await recomputeAll(admin, opts.app ?? admin, report.newRevisions.length ? 'rule_version' : 'holiday_table', correlationId);
-  }
+  // Best effort here; the worker keeps draining until every row is done.
+  report.recompute = await drainPending(opts.app ?? admin, correlationId);
   return report;
-}
-
-/** Recompute every project of every tenant (listed through the migrator), retrying a run that a
- * concurrent correction made stale (compare-and-set discards it). */
-export async function recomputeAll(admin: TenantDb, app: TenantDb, cause: 'rule_version' | 'holiday_table', correlationId: string) {
-  const projects = (await admin.pool.query<{ id: string; tenant_id: string }>('select id, tenant_id from project order by tenant_id, id')).rows;
-  const out = { projects: projects.length, written: 0, unchanged: 0, failed: [] as string[] };
-  for (const p of projects) {
-    let done = false;
-    for (let attempt = 0; attempt < 3 && !done; attempt++) {
-      const r = await recomputeBatch(app, p.tenant_id, p.id, correlationId, { cause });
-      if (r.status === 'written') out.written++;
-      if (r.status === 'unchanged') out.unchanged++;
-      done = r.status !== 'discarded';
-    }
-    if (!done) out.failed.push(p.id);
-  }
-  return out;
 }
 
 /**
@@ -125,10 +120,10 @@ export async function changeProclaimedHoliday(
   admin: TenantDb,
   app: TenantDb,
   change: { day: string; name: string; source: string; remove?: boolean },
-) {
+): Promise<DrainReport & { enqueued: number }> {
   if (change.source.startsWith('Legislation Act, 2006')) throw new Error('generated rows are managed by syncDraftRules');
   const correlationId = randomUUID();
-  await admin.withGlobalWrite(async (tx) => {
+  const enqueued = await admin.withGlobalWrite(async (tx) => {
     const r = change.remove
       ? await tx.raw.query("delete from holiday where jurisdiction = 'ON' and day = $1 and source = $2", [change.day, change.source])
       : await tx.raw.query("insert into holiday (jurisdiction, day, name, source) values ('ON', $1, $2, $3) on conflict do nothing", [change.day, change.name, change.source]);
@@ -137,6 +132,14 @@ export async function changeProclaimedHoliday(
       "insert into audit_event (tenant_id, actor_id, action, entity_type, entity_id, after_hash, correlation_id) values (null, null, $1, 'holiday', null, decode($2, 'hex'), $3)",
       [change.remove ? 'holiday.remove' : 'holiday.add', sha256Hex(`${change.day}|${change.source}`), correlationId],
     );
+    await tx.raw.query("update rules_generation set holiday_gen = holiday_gen + 1, changed_at = now() where jurisdiction = 'ON'");
+    return enqueueAllProjects(tx, 'holiday_table');
   });
-  return recomputeAll(admin, app, 'holiday_table', correlationId);
+  return { enqueued, ...(await drainPending(app, correlationId)) };
+}
+
+/** Queue every project durably, then drain (kept for operators and the reviewer's scripts). */
+export async function recomputeAll(admin: TenantDb, app: TenantDb, cause: 'rule_version' | 'holiday_table', correlationId: string): Promise<DrainReport & { enqueued: number }> {
+  const enqueued = await admin.withGlobalWrite((tx) => enqueueAllProjects(tx, cause));
+  return { enqueued, ...(await drainPending(app, correlationId)) };
 }

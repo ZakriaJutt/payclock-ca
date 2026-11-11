@@ -1,6 +1,7 @@
 /** Worker process: `tsx apps/worker/src/main.ts`. Imports no web-framework or apps/web module. */
 import { TenantDb } from '@payclock/db';
 import { createLogger, createPgBossQueue, loadConfig } from '@payclock/platform';
+import { startDrainLoop } from './drain.ts';
 import { recomputeBatchHandler } from './handlers.ts';
 
 const config = loadConfig();
@@ -13,8 +14,10 @@ if (!(await db.ping())) {
 const queue = await createPgBossQueue(config.DATABASE_URL, { migrate: false });
 const handler = recomputeBatchHandler(db, logger);
 await queue.work('recompute.batch', (job) => handler(job));
-logger.info('worker.ready', { queues: ['recompute.batch'] });
+const stopDrain = startDrainLoop(db, logger);
+logger.info('worker.ready', { queues: ['recompute.batch', 'recompute_pending'] });
 const stop = async () => {
+  stopDrain();
   await queue.stop();
   await db.close();
   process.exit(0);

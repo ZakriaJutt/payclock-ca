@@ -16,8 +16,17 @@ export async function invariantCheck(tx: Tx): Promise<string[]> {
   for (const r of stale.rows) out.push(`current deadline ${r.id} rests on a superseded event`);
   const retired = await tx.raw.query(
     `select d.id from deadline d join rule_clock c on c.id = d.rule_clock_id join rule_version v on v.id = c.rule_version_id
-     where d.is_current and v.status = 'retired'`,
+     where d.is_current and v.status = 'retired'
+       and not exists (select 1 from subcontract s join recompute_pending p on p.project_id = s.project_id
+                       where s.id = d.subcontract_id and p.done_at is null)`,
   );
   for (const r of retired.rows) out.push(`current deadline ${r.id} rests on a retired rule version`);
+  const staleGen = await tx.raw.query(
+    `select d.id from deadline d join computation_run c on c.id = d.computation_run_id join subcontract s on s.id = d.subcontract_id
+     cross join rules_generation g
+     where g.jurisdiction = 'ON' and d.is_current and (c.rules_gen < g.rules_gen or c.holiday_gen < g.holiday_gen)
+       and not exists (select 1 from recompute_pending p where p.project_id = s.project_id and p.done_at is null)`,
+  );
+  for (const r of staleGen.rows) out.push(`current deadline ${r.id} computed under superseded rules and not queued for recompute`);
   return out;
 }

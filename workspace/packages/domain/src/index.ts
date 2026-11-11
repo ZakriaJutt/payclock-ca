@@ -5,5 +5,6 @@ export { addEvent, correctEvent, type EventInput, type CorrectionInput } from '.
 export { getInvoice, getRecomputation, presentDeadline } from './queries.ts';
 export { recomputeBatch, type BatchOutcome } from './batch.ts';
 export { changeProclaimedHoliday, HOLIDAY_YEARS, recomputeAll, syncDraftRules, type SyncReport } from './rules-sync.ts';
+export { drainPending, enqueueStale, type DrainReport } from './pending.ts';
 export { invariantCheck } from './invariants.ts';
 export { resolveMembership } from './membership.ts';

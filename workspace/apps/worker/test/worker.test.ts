@@ -57,3 +57,14 @@ describe('worker (IT-01 job part, IT-14 partial)', () => {
     expect(ready).toBe(true);
   });
 });
+
+describe('worker drain loop (B1-005)', () => {
+  it('starts, passes once without error, and stops', async () => {
+    const { startDrainLoop } = await import('../src/drain.ts');
+    const lines: string[] = [];
+    const stop = startDrainLoop(db, createLogger({ service: 't', sink: (l) => lines.push(l) }), 60_000);
+    await new Promise((r) => setTimeout(r, 500));
+    stop();
+    expect(lines.some((l) => l.includes('recompute.pending.error'))).toBe(false);
+  });
+});

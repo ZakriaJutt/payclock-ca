@@ -42,7 +42,7 @@ describe('B1-005 rule and holiday changes recompute every stored deadline with a
   it('adding a proclaimed holiday on the due day moves CLK-17 to the next day; removing it moves it back', async () => {
     const source = 'Synthetic proclamation for a regression test';
     const added = await changeProclaimedHoliday(admin, db, { day: '2026-08-03', name: 'Synthetic proclaimed day', source });
-    expect(added.written).toBeGreaterThanOrEqual(1);
+    expect(added.done).toBeGreaterThanOrEqual(1);
     const moved = await deadline('CLK-17');
     expect(moved.statutory_date).toBe('2026-08-04');
     const diff = await db.withTenant(A.tenantId, (tx) => getRecomputation(tx, A.viewer, moved.computation_run_id));
@@ -57,27 +57,33 @@ describe('B1-005 rule and holiday changes recompute every stored deadline with a
   it('a changed rule row creates a new revision, retires the old one, and moves the stored deadline (no deadline left on the retired revision)', async () => {
     const row = RULE_VERSIONS.find((v) => v.code === 'ON-2026-01')!.clocks.find((c) => c.clockCode === 'CLK-09' && c.variant === 'b')!;
     expect((await deadline('CLK-09', 'b')).statutory_date).toBe('2026-11-29');
+    const revisions = async () => (await admin.pool.query("select revision, status from rule_version where code = 'ON-2026-01' order by revision")).rows;
+    const before = await revisions();
+    const liveBefore = before.find((r) => r.status === 'draft')!.revision;
+    let back: Awaited<ReturnType<typeof syncDraftRules>> | undefined;
     row.offsetDays = 59; // simulated corrected rule row (reviewer case X-2)
     try {
       const rep = await syncDraftRules(admin, undefined, { app: db });
-      expect(rep.newRevisions).toEqual(['ON-2026-01 r2']);
+      expect(rep.newRevisions).toEqual([`ON-2026-01 r${liveBefore + 1}`]);
       expect(rep.recompute.failed).toEqual([]);
       const moved = await deadline('CLK-09', 'b');
       expect(moved.statutory_date).toBe('2026-11-28');
       const diff = await db.withTenant(A.tenantId, (tx) => getRecomputation(tx, A.viewer, moved.computation_run_id));
       expect(diff.cause).toBe('rule_version');
-      const versions = await admin.pool.query("select revision, status from rule_version where code = 'ON-2026-01' order by revision");
-      expect(versions.rows).toEqual([{ revision: 1, status: 'retired' }, { revision: 2, status: 'draft' }]);
+      const versions = await revisions();
+      expect(versions.filter((v) => v.status === 'draft')).toEqual([{ revision: liveBefore + 1, status: 'draft' }]);
+      expect(versions.find((v) => v.revision === liveBefore)).toEqual({ revision: liveBefore, status: 'retired' });
       expect(await db.withTenant(A.tenantId, (tx) => invariantCheck(tx))).toEqual([]);
     } finally {
       row.offsetDays = 60;
+      // Always put the shared test database back, even when an assertion above failed.
+      back = await syncDraftRules(admin, undefined, { app: db });
     }
-    const back = await syncDraftRules(admin, undefined, { app: db });
-    expect(back.newRevisions).toEqual(['ON-2026-01 r3']);
+    expect(back!.newRevisions).toEqual([`ON-2026-01 r${liveBefore + 2}`]);
     expect((await deadline('CLK-09', 'b')).statutory_date).toBe('2026-11-29');
     const again = await syncDraftRules(admin, undefined, { app: db });
     expect(again.newRevisions).toEqual([]);
-    expect(again.recompute.projects).toBe(0);
+    expect(again.enqueued).toBe(0);
   });
 
   it('the invariant reports a current deadline left on a retired revision', async () => {
