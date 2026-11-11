@@ -221,7 +221,7 @@ Queue: pg-boss in the same Postgres (`AD-05`).
 | `digest.weekly` | Cron per workspace | 60 s | 3 | workspace + ISO week; writes a `digest_send` row | Alert; row `failed` |
 | `billing.sync` | Verified webhook event | 30 s | 5 | provider event id (`billing_event` unique) | Alert; state re-fetched by nightly sweep |
 | `import.process` | Upload | 5 min | 3, resumes from last committed row | batch + row number | Batch `partial`, rows listed |
-| `recompute.batch` | Rule version approval or new revision; holiday table change (B1: `npm run rules:sync` and `changeProclaimedHoliday` run it for every project at once, with a `computation_run` and audit row each) | 10 min | 3, per scope | scope + rule version + fact_version | Alert; scopes listed |
+| `recompute.batch` | Rule version approval or new revision; holiday table change. The change bumps `rules_generation` and inserts one `recompute_pending` row per project in the same transaction; the worker drains the rows every 15 s (and `npm run rules:sync` drains and re-queues any stale project) | 10 min | Until done: each pass retries every open row and records `attempts` and `last_error` | project id (one open row per project) | Alert on rows older than one hour (alert not built in B1). Until then every affected deadline reads as `recompute_pending`, never as a current date |
 | `invariant.check` | Nightly | 5 min | 1 | date | Page founder |
 | `reconcile.sweep` | Every 10 min | 2 min | 1 | n/a | Alert |
 | `retention.sweep` | Nightly | 10 min | 3 | date | Alert |

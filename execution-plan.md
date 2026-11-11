@@ -223,7 +223,7 @@ The brief's development estimate is 110 hours / 14 days `[C]`. This plan's build
 
 ## 6. Proposed scripts and commands
 
-Proposed unless marked. Exist since B1 (2026-11-11), under `workspace/`: `make dev` (as `scripts/dev.ts`, services run directly, no Compose), `scripts/seed-synthetic`, `scripts/check-migrations` (built into `npm run db:migrate` and `IT-10`), `scripts/orm-parity`, `scripts/golden-verify`, and (new) `scripts/rules-sync` (rule revisions and holiday table, then recompute of every stored deadline). Not yet: `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
+Proposed unless marked. Exist since B1 (2026-11-11), under `workspace/`: `make dev` (as `scripts/dev.ts`, services run directly, no Compose), `scripts/seed-synthetic`, `scripts/check-migrations` (built into `npm run db:migrate` and `IT-10`), `scripts/orm-parity`, `scripts/golden-verify`, and (new) `scripts/rules-sync` (rule revisions and holiday table, committed with a pending-recompute row per project, then drained; also re-queues any stale project). Not yet: `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
 
 | Script | Purpose | Inputs | Outputs | Failure behaviour |
 |---|---|---|---|---|

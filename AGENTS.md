@@ -72,6 +72,8 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | Migrations, order check, ORM parity, test reset | `migrate`, `checkOrder`, `ormParity`, `resetTestSchemas` | `packages/db/src/` |
 | Use cases | `createProject`, `createSubcontract`, `createInvoice`, `addEvent`, `correctEvent`, `getInvoice`, `getRecomputation`, `recomputeBatch`, `invariantCheck` | `packages/domain/src/` |
 | Audit row | `audit` | `packages/domain/src/audit.ts` |
+| Durable recompute after a rule or holiday change; stale scan; worker loop | `enqueueAllProjects`, `enqueueStale`, `drainPending`, `startDrainLoop` | `packages/domain/src/pending.ts`, `apps/worker/src/drain.ts` |
+| Stale-on-read check | `staleRunIds` (used by `getInvoice`, `getRecomputation`) | `packages/domain/src/queries.ts` |
 
 ### Commands that exist (B1)
 

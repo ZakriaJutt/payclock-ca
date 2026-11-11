@@ -33,6 +33,8 @@ erDiagram
   tenant ||--o{ billing_event : bills
   tenant ||--o{ api_idempotency : replays
   holiday }o--|| holiday_coverage : covered_by
+  project ||--o{ recompute_pending : awaits
+  rules_generation ||--o{ computation_run : stamps
   rule_clock }o--o{ holiday : extends_past
   rule_clock }o--o{ interest_rate : reads
 ```
@@ -80,13 +82,15 @@ erDiagram
 | `rule_clock` | `rule_version_id` fk; `clock_code text` (`CLK-01`..`CLK-17`); `variant text default ''` (`a`, `b` for CLK-09); `trigger_spec jsonb` naming event types explicitly (for example CLK-11: `{"earliest_of":["EV-09","EV-17","EV-10","EV-07"],"ceiling_if_unknown":{"EV-17":"EV-18"}}`, where a ceiling can only produce `bound = no_later_than`; CLK-09b: `{"earliest_of":["EV-07","EV-09",{"termination_for_lien":{"actual":"EV-17","published":"EV-18","in_time_days":7}},"EV-10"]}`); `pending_question text null` (for example `L-09`: dependent output withheld); `offset_days int`; `window_end_days int null`; `extend_on_holiday bool`; `act_by_buffer_days int default 0`; `section_ref text`; `applies_when jsonb`; `computed bool default true`; `not_computed_reason text null`; unique(`rule_version_id`,`clock_code`,`variant`) | I |
 | `holiday` | pk(`jurisdiction`,`day date`); `name text`; `source text` | I |
 | `holiday_coverage` | pk(`jurisdiction`,`year int`); `source text`. Years the holiday table is complete for; the engine computes no date that needs another year (B1: 2018-2040) | I |
+| `rules_generation` | pk `jurisdiction`; `rules_gen int`; `holiday_gen int`; `changed_at`. Incremented in the transaction of any rule-version or holiday-table change | I |
+| `recompute_pending` | `tenant_id`, `project_id` (composite fk to project); `cause`; `rules_gen`, `holiday_gen` (generation the recompute must reach); `attempts`; `last_error text null`; `done_at null`; one open row per project (partial unique index). Written with the change; drained by the worker; holds identifiers only, no row-level security; the runtime role may read and update, and queues stale projects only through the `enqueue_stale_recomputes()` function | I |
 | `interest_rate` | `jurisdiction`; `effective_from date`; `effective_to date null`; `annual_rate numeric(6,4)` (decimal fraction, e.g. 0.0400); `source text`; no overlapping ranges, enforced by a trigger because `btree_gist` is not available | I |
 
 ### Computation
 
 | Table | Fields | Sens. |
 |---|---|---|
-| `computation_run` | `tenant_id`; `scope_type`; `scope_id`; `cause` enum(new_event, correction, rule_version, holiday_table, import); `cause_event_id uuid null`; `fact_version_read int`; `inputs_hash bytea`; `engine_version text`; `status` enum(succeeded, discarded, failed); `created_by uuid null` | C |
+| `computation_run` | `tenant_id`; `scope_type`; `scope_id`; `cause` enum(new_event, correction, rule_version, holiday_table, import); `cause_event_id uuid null`; `fact_version_read int`; `inputs_hash bytea`; `engine_version text`; `status` enum(succeeded, discarded, failed); `rules_gen int`, `holiday_gen int` (generation the run used; a current deadline whose run is older is read as `recompute_pending`); `created_by uuid null` | C |
 | `deadline` | `tenant_id`; `subcontract_id` fk; `invoice_id uuid null`; `clock_code text`; `variant text default ''`; `rule_clock_id` fk null (null only when no rule version covers the clock, so the state is `not_computable` or `not_applicable`); `computation_run_id` fk; `state` enum(computed, provisional, not_computable, not_applicable); `statutory_date date null`; `bound` enum(exact, no_later_than) default exact; `path text null` (CLK-17: A to H); `act_by_date date null`; `window_end_date date null`; `amount_cents bigint null` (CLK-17 and CLK-16: the amount the portion covers); `missing_facts text[] default '{}'`; `flags text[] default '{}'`; `withheld jsonb default '[]'` (outputs withheld pending a legal question, e.g. the extended day under L-09); `notes text[] default '{}'`; `trigger_event_ids uuid[]`; `is_current bool default true`; `superseded_by_run_id uuid null`. Checks: `state = 'computed'` implies `statutory_date` not null, `missing_facts = '{}'` and `bound = 'exact'`; `bound = 'no_later_than'` implies `state = 'provisional'`; a date exists exactly when the state is `computed` or `provisional`; those two states need `rule_clock_id`; a row that is not current names the run that superseded it. Only the supersession markers may be updated; no delete (trigger) | C |
 | `flag` | `tenant_id`; `entity_type text`; `entity_id uuid`; `code text` (`L-01`..`L-11`, `STALE_SENT`); `raised_by_run_id uuid null`; `resolved_at timestamptz null`; `resolved_by uuid null`; `note text null` | C |
 | `reminder` | `tenant_id`; `deadline_id` fk; `kind` enum(actby_d14, actby_d7, actby_d3, actby_d0, last_d5, last_d2, last_d0, due, due_plus3, urgent_moved_earlier); `send_on date`; `status` enum(scheduled, sent, cancelled, failed) default scheduled; `provider_message_id text null`; `attempts int default 0`; `correlation_id uuid`; unique(`deadline_id`,`kind`) | C |

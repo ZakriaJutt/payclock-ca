@@ -217,11 +217,11 @@ Run on 2026-11-11 from `workspace/` after `npx tsx scripts/db-reset-test.ts` (dr
 |---|---|
 | `npm run lint` | 0 problems |
 | `npm run typecheck` | 0 errors |
-| `npm run test:unit` | 9 files, 83 tests passed (after fix round 1; 8 files, 65 before) |
-| `npm run test:integration` | 6 files, 43 tests passed (after fix round 1; 5 files, 37 before) |
+| `npm run test:unit` | 9 files, 83 tests passed (after fix rounds 1 and 2; 8 files, 65 before round 1) |
+| `npm run test:integration` | 7 files, 49 tests passed (after fix round 2; 6 files, 43 after round 1; 5 files, 37 before) |
 | `npm run golden-verify` | 15/15 catalogue cases equal |
-| `npx tsx scripts/orm-parity.ts --test` | 0 differences (2 migrations) |
-| Reviewer scripts `_coordination/review/payclock-ca-b1-*` (run, not edited) | Before fix round 1: engine 23/34, integration 23/25, extra X-1 and X-2 deviating. After: engine 34/34, integration 25/25, X-1 regime undecided with `L-06` and `REGIME_ESTIMATED`, X-2 new revision plus a recompute run |
+| `npx tsx scripts/orm-parity.ts --test` | 0 differences (3 migrations) |
+| Reviewer scripts `_coordination/review/payclock-ca-b1-*` (run, not edited) | Before fix round 1: engine 23/34, integration 23/25, extra X-1 and X-2 deviating. After: engine 34/34, integration 25/25, X-1 regime undecided with `L-06` and `REGIME_ESTIMATED`, X-2 new revision plus a recompute run. After fix round 2: round-1 engine 34/34 and integration 25/25; round-2 cases 25/25 (N-1e passes); N-6 passes |
 | `npx tsx scripts/dev.ts --check` | "ready" with `{"database":true,"queue":true}`; with an unreachable database: "NOT READY: database unhealthy", non-zero |
 | `npm audit --omit=dev` | 0 vulnerabilities after upgrading drizzle-orm to 0.45.4 and zod to 4.6.7; dev-only advisories remain in the test runner's dependencies (tinypool via vitest 3.2.4) |
 
@@ -283,3 +283,30 @@ Legislation Act, 2006 ss. 88-89 re-read on e-Laws (built-in browser, rendered pa
 | B1-009 (minor) | Fixed | Anniversary per Legislation Act s. 89(7) | B1-009: EV-11 2028-02-29 gives Form 6 by 2029-03-14 with the s. 89(7) note |
 
 The existing `payclock_dev` database was upgraded by `make dev-check`: new revisions r2 for all four versions, four Civic Holiday rows (2025-2028) removed, the seeded project recomputed.
+
+### 9.7 Retest round 2 verdicts and fix round 2 (2026-11-11)
+
+Reviewer verdicts from `_coordination/review/payclock-ca-b1-verdicts.json` (round 2, head `af8a2d6`), copied unchanged:
+
+| Finding | Severity | Verdict | Open part (reviewer's words) |
+|---|---|---|---|
+| B1-001 | major | Closed | |
+| B1-002 | major | Closed | |
+| B1-003 | major | Closed | |
+| B1-004 | major | Closed, part open | Estimate wrong by more than 365 days still gives exact computed rights dates under POST-2019 (flagged REGIME_ESTIMATED only); 365 is an unproven [P] reach awaiting the lawyer (L-06) |
+| B1-005 | major | Still open | Rule or holiday change commits before an in-process recomputeAll with no durable pending record; a failed or interrupted recompute leaves stored dates stale and a later rules:sync recomputes nothing (N-1e payment date; N-6 lien date one day later than the rule in force) |
+| B1-006 | minor | Closed | |
+| B1-007 | minor | Closed | |
+| B1-008 | minor | Closed | |
+| B1-009 | minor | Closed | |
+
+Fix round 2 edits (author; fixed after retest, not yet re-reviewed):
+
+| Finding | Status | Fix | Regression test |
+|---|---|---|---|
+| B1-005 | Fixed after retest | Migration `20261111T300000`: `rules_generation`, `computation_run.rules_gen`/`holiday_gen`, `recompute_pending`, function `enqueue_stale_recomputes()`. A rule or holiday change, the generation bump and one pending row per project commit in one transaction. The worker drains open rows every 15 s and records attempts and errors until each is done; draining is idempotent. Every `rules:sync` re-queues any project with a current deadline from an older generation and drains. Batch recompute is compare-and-set on both fact version and generation. On read, a deadline from an older generation is `recompute_pending` with no date (`getInvoice`); a recomputation diff from an older generation says `computed_under_superseded_rules`. The invariant check reports stale deadlines with no open pending row | `packages/domain/test/review-b1-round2.test.ts`: N-6 (CLK-09b rule 60 to 59 days, recompute fails: read shows `recompute_pending` and never 2027-12-27; later sync gives 2027-12-26); N-1e (proclaimed day, recompute fails: pending; later no-change sync gives 2027-12-29); crash between commit and recompute (a failed drain leaves the row open; the worker drain alone finishes it; a second drain does nothing); lost pending row (read shows pending, invariant reports it, the runtime-role scan re-queues it). `apps/worker/test/worker.test.ts`: drain loop runs without error |
+| B1-004 | Part open, unchanged in this round | The coordinator's round-2 ruling covered B1-005 only | |
+
+Also fixed in this round: the round-1 rule-change test asserted absolute revision numbers and restored the database only on success, so a different file order left a changed rule in the shared test database; it now asserts relative revisions and restores in `finally`. The integration suite passed under five shuffled file orders (`--sequence.shuffle.files`, seeds 1-5). The reviewer's raw SQL in N-6 still reads the stored (superseded) row; the application read path never presents it.
+
+Residual: no alert yet on pending rows older than one hour; reminders are not sent in B1, so the send-time re-check that would refuse a reminder for a pending deadline (TRD 6.1) is not built.
