@@ -1,4 +1,4 @@
-import type { TenantDb, Tx } from '@payclock/db';
+import type { TenantDb } from '@payclock/db';
 import type { Mailer } from '@payclock/platform';
 import type { Actor, Role } from '../actor.ts';
 import { audit } from '../audit.ts';
@@ -51,14 +51,31 @@ export interface SessionContext {
 
 export interface SignInResult extends SessionContext {
   token: string;
+  /** Long-lived device cookie value for this account (exempts this browser from the account-wide delay). */
+  deviceToken: string;
   role: Role | null;
 }
 
-/** Failed-attempt policy: no delay for the first few failures, then doubling up to 15 minutes. */
-const THROTTLE = {
-  account: { free: 4, capS: 900 },
+/**
+ * Attempt policy (TRD 8.1; B2 security round 1, findings B2-S01 and B2-S02). Every attempt is
+ * reserved before any password or code is checked, in one transaction that locks the counter
+ * rows, so a parallel burst gets no extra tries. The longest delays apply per client (one address,
+ * or one account from one address); the account-wide delay is capped short, so someone who only
+ * knows an owner's email can slow that owner by at most `account.capS` seconds, never lock them
+ * out. A successful sign-in clears the account and pair counters and gives back its address slot.
+ */
+export const THROTTLE = {
+  /** Same account from the same client address. */
+  pair: { free: 4, capS: 900 },
+  /** One client address across all accounts (password spraying). */
   address: { free: 20, capS: 900 },
-  reset: { free: 3, capS: 3600 },
+  /** Account-wide, from any address without a device cookie: short cap, so it cannot be used as a lock-out. */
+  account: { free: 5, capS: 30 },
+  /** A browser holding a device cookie for this account (it is exempt from the account-wide delay). */
+  device: { free: 4, capS: 900 },
+  /** Reset requests per account (inbox flooding). */
+  reset: { free: 3, capS: 300 },
+  /** Invitations per workspace. */
   invite: { free: 20, capS: 3600 },
 } as const;
 type ThrottleKind = keyof typeof THROTTLE;
@@ -84,38 +101,82 @@ export class LocalAuthService {
     return hmacHex(this.s.secretKey, `csrf:${sessionId}`);
   }
 
-  // ---------- throttling (V6.3.1, V6.1.1: delays, never a hard lock) ----------
-  private async throttleWait(tx: Tx, kind: ThrottleKind, key: string): Promise<number> {
-    const r = await tx.raw.query<{ next_allowed_at: Date | null }>('select next_allowed_at from auth_throttle where key = $1', [`${kind}:${key}`]);
-    const next = r.rows[0]?.next_allowed_at;
-    const wait = next ? Math.ceil((next.getTime() - this.now()) / 1000) : 0;
-    return wait > 0 ? wait : 0;
+  // ---------- throttling (V6.3.1, V6.1.1: delays, never a lock-out) ----------
+  /**
+   * Reserve one attempt on every key, atomically: the rows are locked (in key order, so two
+   * requests cannot deadlock), and if any key is in its delay nothing is counted and the call is
+   * refused with 429. Otherwise every counter goes up and the next delay is set before the caller
+   * checks the password or code.
+   */
+  private async reserve(pairs: Array<[ThrottleKind, string]>): Promise<void> {
+    const now = this.now();
+    const keys = [...new Set(pairs.map(([k, v]) => `${k}:${v}`))].sort();
+    const wait = await this.db.withIdentity(async (tx) => {
+      await tx.raw.query('insert into auth_throttle (key, failures, updated_at) select k, 0, $2 from unnest($1::text[]) as k order by k on conflict (key) do nothing', [keys, new Date(now)]);
+      const rows = (await tx.raw.query<{ key: string; failures: number; next_allowed_at: Date | null; updated_at: Date }>(
+        'select key, failures, next_allowed_at, updated_at from auth_throttle where key = any($1::text[]) order by key for update', [keys])).rows;
+      let longest = 0;
+      for (const r of rows) {
+        const stale = r.updated_at.getTime() < now - DECAY_MS;
+        const next = stale ? null : r.next_allowed_at;
+        if (next && next.getTime() > now) longest = Math.max(longest, Math.ceil((next.getTime() - now) / 1000));
+      }
+      if (longest > 0) return longest;
+      for (const r of rows) {
+        const p = THROTTLE[r.key.slice(0, r.key.indexOf(':')) as ThrottleKind];
+        const failures = (r.updated_at.getTime() < now - DECAY_MS ? 0 : r.failures) + 1;
+        const delayS = failures <= p.free ? 0 : Math.min(p.capS, 2 ** (failures - p.free));
+        await tx.raw.query('update auth_throttle set failures = $2, next_allowed_at = $3, updated_at = $4 where key = $1',
+          [r.key, failures, delayS ? new Date(now + delayS * 1000) : null, new Date(now)]);
+      }
+      return 0;
+    });
+    if (wait > 0) throw new AuthError(429, 'too_many_attempts', 'too many attempts; try again later', [], {}, wait);
   }
 
-  private async throttleFail(kind: ThrottleKind, key: string): Promise<void> {
-    const p = THROTTLE[kind];
+  /** After a successful sign-in: account and pair counters cleared, the address slot given back. */
+  private async attemptSucceeded(email: string, address: string): Promise<void> {
     await this.db.withIdentity(async (tx) => {
-      const now = new Date(this.now());
-      const r = await tx.raw.query<{ failures: number; updated_at: Date }>(
-        `insert into auth_throttle (key, failures, updated_at) values ($1, 1, $2)
-         on conflict (key) do update set failures = case when auth_throttle.updated_at < $3 then 1 else auth_throttle.failures + 1 end, updated_at = $2
-         returning failures, updated_at`,
-        [`${kind}:${key}`, now, new Date(this.now() - DECAY_MS)],
-      );
-      const failures = r.rows[0]!.failures;
-      const delayS = failures <= p.free ? 0 : Math.min(p.capS, 2 ** (failures - p.free));
-      await tx.raw.query('update auth_throttle set next_allowed_at = $2 where key = $1', [`${kind}:${key}`, delayS ? new Date(this.now() + delayS * 1000) : null]);
+      await tx.raw.query('delete from auth_throttle where key = any($1::text[])', [[`account:${email}`, `pair:${email}|${address}`]]);
+      await tx.raw.query(
+        `update auth_throttle set failures = greatest(failures - 1, 0),
+           next_allowed_at = case when failures - 1 <= $2 then null else next_allowed_at end where key = $1`,
+        [`address:${address}`, THROTTLE.address.free]);
     });
   }
 
-  private async throttleClear(kind: ThrottleKind, key: string): Promise<void> {
-    await this.db.withIdentity((tx) => tx.raw.query('delete from auth_throttle where key = $1', [`${kind}:${key}`]));
+  /**
+   * A browser that once signed in to this account carries a device cookie bound to the account
+   * (HMAC under AUTH_SECRET_KEY). It is counted on its own key instead of the account-wide one,
+   * so attacks from elsewhere never delay the owner's usual browser (OWASP device cookies).
+   */
+  private deviceId(email: string, deviceToken: string | null | undefined): string | null {
+    const m = deviceToken ? /^([A-Za-z0-9_-]{22})\.([0-9a-f]{64})$/.exec(deviceToken) : null;
+    return m && safeEqual(m[2]!, hmacHex(this.s.secretKey, `device:${email}:${m[1]}`)) ? m[1]! : null;
   }
 
-  private async assertNotThrottled(pairs: Array<[ThrottleKind, string]>): Promise<void> {
-    const waits = await this.db.withIdentity(async (tx) => Promise.all(pairs.map(([k, v]) => this.throttleWait(tx, k, v))));
-    const wait = Math.max(0, ...waits);
-    if (wait > 0) throw new AuthError(429, 'too_many_attempts', 'too many attempts; try again later', [], {}, wait);
+  private newDeviceToken(email: string): string {
+    const id = randomToken(16);
+    return `${id}.${hmacHex(this.s.secretKey, `device:${email}:${id}`)}`;
+  }
+
+  private credentialKeys(email: string, address: string, deviceId: string | null = null): Array<[ThrottleKind, string]> {
+    return [['pair', `${email}|${address}`], ['address', address], deviceId ? ['device', `${email}|${deviceId}`] : ['account', email]];
+  }
+
+  // ---------- background work (mail that must not change the reply's timing) ----------
+  private readonly pending = new Set<Promise<void>>();
+
+  private background(correlationId: string, fn: () => Promise<void>): void {
+    const p: Promise<void> = fn()
+      .catch(() => this.authEvent('auth.background_failed', null, null, correlationId).catch(() => undefined))
+      .finally(() => this.pending.delete(p));
+    this.pending.add(p);
+  }
+
+  /** Waits for queued background work (tests, and the server before shutdown). */
+  async settle(): Promise<void> {
+    while (this.pending.size) await Promise.all([...this.pending]);
   }
 
   private async authEvent(action: string, userId: string | null, tenantId: string | null, correlationId: string): Promise<void> {
@@ -123,19 +184,18 @@ export class LocalAuthService {
   }
 
   // ---------- sign-in ----------
-  async signIn(input: { email?: unknown; password?: unknown; totp_code?: unknown; tenant_id?: unknown }, client: { address: string; correlationId: string; priorToken?: string | null }): Promise<SignInResult> {
+  async signIn(input: { email?: unknown; password?: unknown; totp_code?: unknown; tenant_id?: unknown }, client: { address: string; correlationId: string; priorToken?: string | null; deviceToken?: string | null }): Promise<SignInResult> {
     const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
     const password = typeof input.password === 'string' ? input.password : '';
     if (!EMAIL.test(email) || !password || password.length > 1024) throw new AuthError(422, 'unprocessable', 'email and password are required', ['email', 'password']);
     const wanted = input.tenant_id === undefined || input.tenant_id === null ? null : uuidField(input.tenant_id, 'tenant_id');
-    await this.assertNotThrottled([['account', email], ['address', client.address]]);
+    const deviceId = this.deviceId(email, client.deviceToken);
+    await this.reserve(this.credentialKeys(email, client.address, deviceId));
 
     const user = await this.db.withIdentity(async (tx) => (await tx.raw.query<{ id: string; is_operator: boolean; password_hash: string | null; totp_secret_enc: Buffer | null; totp_last_step: number | null }>(
       `select u.id, u.is_operator, c.password_hash, c.totp_secret_enc, c.totp_last_step
        from app_user u left join user_credential c on c.user_id = u.id where u.email = $1`, [email])).rows[0]);
     const fail = async (why: string) => {
-      await this.throttleFail('account', email);
-      await this.throttleFail('address', client.address);
       await this.authEvent(`auth.sign_in_failed.${why}`, user?.id ?? null, null, client.correlationId);
       return invalid();
     };
@@ -176,7 +236,8 @@ export class LocalAuthService {
     // Operators must use TOTP (TRD 8.1): without it the session may only enrol an authenticator.
     const restricted = user.is_operator && !totpVerified;
 
-    await this.throttleClear('account', email);
+    await this.attemptSucceeded(email, client.address);
+    if (deviceId) await this.db.withIdentity((tx) => tx.raw.query('delete from auth_throttle where key = $1', [`device:${email}|${deviceId}`]));
     const token = randomToken();
     const now = this.now();
     const absolute = new Date(now + this.s.absoluteHours * 3600_000);
@@ -194,7 +255,8 @@ export class LocalAuthService {
       return id;
     });
     await this.authEvent('auth.signed_in', user.id, tenantId, client.correlationId);
-    return { token, sessionId: session, userId: user.id, tenantId, role, restricted, totpVerified, csrfToken: this.csrfFor(session), idleExpiresAt: idle.toISOString() };
+    const deviceToken = deviceId ? client.deviceToken! : this.newDeviceToken(email);
+    return { token, deviceToken, sessionId: session, userId: user.id, tenantId, role, restricted, totpVerified, csrfToken: this.csrfFor(session), idleExpiresAt: idle.toISOString() };
   }
 
   /** Server-side session check on every request (V7.2.1): unknown, revoked, idle or expired is null. */
@@ -271,8 +333,7 @@ export class LocalAuthService {
     if (!EMAIL.test(email)) throw new DomainError(422, 'unprocessable', 'a valid email is required', ['email']);
     if (input.role !== 'owner' && input.role !== 'member' && input.role !== 'viewer') throw new DomainError(422, 'unprocessable', 'role must be owner, member or viewer', ['role']);
     const role = input.role;
-    await this.assertNotThrottled([['invite', actor.tenantId]]);
-    await this.throttleFail('invite', actor.tenantId); // counts every invitation, not only failures
+    await this.reserve([['invite', actor.tenantId]]); // counts every invitation
     const token = randomToken();
     const expires = new Date(this.now() + (this.s.invitationHours ?? 72) * 3600_000);
     const out = await this.db.withTenant(actor.tenantId, async (tx) => {
@@ -309,7 +370,7 @@ export class LocalAuthService {
     };
   }
 
-  async acceptInvitation(input: { token?: unknown; password?: unknown; display_name?: unknown }, correlationId: string): Promise<{ user_id: string; tenant_id: string; role: Role }> {
+  async acceptInvitation(input: { token?: unknown; password?: unknown; display_name?: unknown }, correlationId: string, address = 'unknown'): Promise<{ user_id: string; tenant_id: string; role: Role }> {
     const token = typeof input.token === 'string' ? input.token : '';
     const password = typeof input.password === 'string' ? input.password : '';
     if (!token || !password) throw new AuthError(422, 'unprocessable', 'token and password are required', ['token', 'password']);
@@ -320,8 +381,14 @@ export class LocalAuthService {
     if (!row) throw linkInvalid();
     let newHash: string | null = null;
     if (row.password_hash) {
-      // An existing account proves it is the same person with its current password.
-      if (!(await verifyPassword(password, row.password_hash))) throw invalid();
+      // An existing account proves it is the same person with its current password, under the
+      // same attempt limits as sign-in (B2-S04): a link holder gets no extra guesses.
+      await this.reserve(this.credentialKeys(row.email, address));
+      if (!(await verifyPassword(password, row.password_hash))) {
+        await this.authEvent('auth.sign_in_failed.invitation_password', row.user_id, null, correlationId);
+        throw invalid();
+      }
+      await this.attemptSucceeded(row.email, address);
     } else {
       const problem = checkPassword(password, row.email);
       if (problem) throw new AuthError(422, `password_${problem}`, 'password not accepted', ['password']);
@@ -346,15 +413,24 @@ export class LocalAuthService {
   }
 
   // ---------- password reset (link by email; never removes TOTP, V6.4.3) ----------
+  /**
+   * The reply is the same, with the same work done before it, for known and unknown addresses
+   * (B2-S03, V6.3.8): only the input check and the attempt reservation run before replying; the
+   * account lookup, the link and the email run afterwards in the background. If the process
+   * stops before the email is sent, the person asks again.
+   */
   async requestPasswordReset(input: { email?: unknown }, client: { address: string; correlationId: string }): Promise<void> {
     const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
     if (!EMAIL.test(email)) throw new AuthError(422, 'unprocessable', 'a valid email is required', ['email']);
-    await this.assertNotThrottled([['reset', email], ['address', client.address]]);
-    await this.throttleFail('reset', email);
+    await this.reserve([['reset', email], ['address', client.address]]);
+    this.background(client.correlationId, () => this.sendPasswordReset(email, client.correlationId));
+  }
+
+  private async sendPasswordReset(email: string, correlationId: string): Promise<void> {
     const user = await this.db.withIdentity(async (tx) => (await tx.raw.query<{ id: string }>(
       'select u.id from app_user u join user_credential c on c.user_id = u.id where u.email = $1 and c.password_hash is not null', [email])).rows[0]);
-    await this.authEvent('auth.reset_requested', user?.id ?? null, null, client.correlationId);
-    if (!user) return; // same answer either way (no account enumeration)
+    await this.authEvent('auth.reset_requested', user?.id ?? null, null, correlationId);
+    if (!user) return;
     const token = randomToken();
     await this.db.withIdentity(async (tx) => {
       await tx.raw.query("update auth_token set used_at = now() where user_id = $1 and kind = 'password_reset' and used_at is null", [user.id]);
@@ -364,7 +440,7 @@ export class LocalAuthService {
       to: email,
       subject: 'Reset your PayClock password',
       text: `A password reset was requested for your PayClock account.\n\nChoose a new password here (the link works once and expires in 60 minutes):\n${this.s.publicUrl}/reset-password#token=${token}\n\nYour authenticator code is still required after the reset. If you did not ask for this, ignore this email.`,
-      correlationId: client.correlationId,
+      correlationId,
     });
   }
 
@@ -390,13 +466,46 @@ export class LocalAuthService {
   }
 
   // ---------- TOTP enrolment ----------
-  async beginTotp(session: SessionContext): Promise<{ secret: string; otpauth_uri: string }> {
+  /**
+   * Operators must have TOTP (TRD 8.1) and the password alone must not be enough to choose it
+   * (B2-S06): an operator's first authenticator needs a single-use enrolment token issued out of
+   * band (`npm run auth:operator-enrolment`, 24 hours), sent to the operator's address.
+   */
+  async issueOperatorEnrolment(emailIn: string, correlationId: string): Promise<void> {
+    const email = emailIn.trim().toLowerCase();
+    const token = randomToken();
+    const userId = await this.db.withIdentity(async (tx) => {
+      const u = (await tx.raw.query<{ id: string }>(
+        'select u.id from app_user u join user_credential c on c.user_id = u.id where u.email = $1 and u.is_operator and c.totp_enabled_at is null', [email])).rows[0];
+      if (!u) throw new AuthError(404, 'not_found', 'no operator without an authenticator has this email');
+      await tx.raw.query("update auth_token set used_at = now() where user_id = $1 and kind = 'totp_enrolment' and used_at is null", [u.id]);
+      await tx.raw.query("insert into auth_token (kind, token_sha256, user_id, expires_at) values ('totp_enrolment', $1, $2, $3)", [sha256(token), u.id, new Date(this.now() + 24 * 3600_000)]);
+      return u.id;
+    });
+    await this.authEvent('auth.operator_enrolment_issued', userId, null, correlationId);
+    await this.mailer.send({
+      to: email,
+      subject: 'Set up your PayClock authenticator',
+      text: `Use this one-time enrolment code when you add your authenticator app (it works once and expires in 24 hours):\n${token}\n\nIf you did not expect this, tell the PayClock founder.`,
+      correlationId,
+    });
+  }
+
+  async beginTotp(session: SessionContext, input: { enrolment_token?: unknown } = {}): Promise<{ secret: string; otpauth_uri: string }> {
     const secret = randomBytes(20);
     const done = await this.db.withIdentity(async (tx) => {
       const r = await tx.raw.query<{ email: string; enabled: Date | null }>(
         'select u.email, c.totp_enabled_at as enabled from app_user u join user_credential c on c.user_id = u.id where u.id = $1', [session.userId]);
       if (!r.rows[0]) throw new AuthError(404, 'not_found', 'account not found');
       if (r.rows[0].enabled) throw new AuthError(409, 'totp_already_enabled', 'an authenticator is already enrolled');
+      if (session.restricted) {
+        const t = typeof input.enrolment_token === 'string' ? input.enrolment_token : '';
+        if (!t) throw new AuthError(403, 'enrolment_token_required', 'an operator needs the enrolment code sent to them', ['enrolment_token']);
+        const used = await tx.raw.query(
+          "update auth_token set used_at = now() where token_sha256 = $1 and kind = 'totp_enrolment' and user_id = $2 and used_at is null and expires_at > $3",
+          [sha256(t), session.userId, new Date(this.now())]);
+        if (!used.rowCount) throw linkInvalid();
+      }
       await tx.raw.query('update user_credential set totp_pending_enc = $2 where user_id = $1', [session.userId, encrypt(this.s.secretKey, secret)]);
       return r.rows[0].email;
     });

@@ -403,7 +403,7 @@ export const recomputePending = pgTable('recompute_pending', {
 ]).enableRLS();
 
 // ---------- B2: local sign-in and evidence files (migration 20261111T500000) ----------
-export const authTokenKind = pgEnum('auth_token_kind', ['invitation', 'password_reset']);
+export const authTokenKind = pgEnum('auth_token_kind', ['invitation', 'password_reset', 'totp_enrolment']);
 export const documentPurpose = pgEnum('document_purpose', ['evidence', 'import', 'action_pdf', 'sent_copy', 'export']);
 export const scanStatus = pgEnum('scan_status', ['pending', 'clean', 'rejected']);
 

@@ -34,6 +34,7 @@ server.requestTimeout = 15_000;
 server.listen(config.API_PORT, config.API_BIND_HOST, () => logger.info('web.listening', { port: config.API_PORT }));
 const stop = async () => {
   server.close();
+  await auth.settle(); // queued reset emails
   await queue.stop();
   await db.close();
   process.exit(0);

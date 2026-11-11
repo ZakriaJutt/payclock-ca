@@ -54,7 +54,10 @@ export const uniqueEmail = (role: string) => `${role}.${randomUUID().slice(0, 8)
 export class Client {
   cookie: string | null = null;
   csrf: string | null = null;
+  /** The session Set-Cookie line of the last sign-in. */
   setCookie: string | null = null;
+  /** Device cookie value (exempts this client from the account-wide delay, B2-S02). */
+  device: string | null = null;
 
   constructor(readonly base: string) {}
 
@@ -64,7 +67,7 @@ export class Client {
       method,
       headers: {
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(this.cookie ? { cookie: `__Host-payclock_session=${this.cookie}` } : {}),
+        ...(this.cookie || this.device ? { cookie: [this.cookie && `__Host-payclock_session=${this.cookie}`, this.device && `__Host-payclock_session_device=${this.device}`].filter(Boolean).join('; ') } : {}),
         ...(this.csrf && method !== 'GET' ? { 'x-csrf-token': this.csrf } : {}),
         ...(method !== 'GET' && !path.startsWith('/api/v1/auth/') ? { 'idempotency-key': randomUUID() } : {}),
         ...headers,
@@ -84,8 +87,10 @@ export class Client {
   async signIn(email: string, password: string, extra: Record<string, unknown> = {}) {
     const r = await this.req('POST', '/api/v1/auth/sign-in', { email, password, ...extra });
     if (r.status === 200) {
-      this.setCookie = r.headers.get('set-cookie');
+      const lines = r.headers.getSetCookie();
+      this.setCookie = lines.find((l) => l.startsWith('__Host-payclock_session=')) ?? null;
       this.cookie = /__Host-payclock_session=([^;]+)/.exec(this.setCookie ?? '')![1]!;
+      this.device = /__Host-payclock_session_device=([^;]+)/.exec(lines.join('\n'))?.[1] ?? this.device;
       this.csrf = r.body.csrf_token;
     }
     return r;

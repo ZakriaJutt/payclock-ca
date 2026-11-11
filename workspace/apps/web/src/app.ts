@@ -35,7 +35,7 @@ export interface AppDeps {
 interface Reply {
   status: number;
   body: unknown;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | string[]>;
   raw?: { body: Buffer; contentType: string; filename: string };
   /** Runs after the transaction commits (email), never on an idempotent replay. */
   after?: () => Promise<void>;
@@ -61,6 +61,7 @@ interface PublicCtx {
   correlationId: string;
   address: string;
   priorToken: string | null;
+  deviceToken: string | null;
 }
 
 type Route =
@@ -81,6 +82,7 @@ function present(row: Record<string, unknown>): Record<string, unknown> {
 
 export function createApp(deps: AppDeps) {
   const cookieName = deps.cookieName ?? '__Host-payclock_session';
+  const deviceCookieName = `${cookieName}_device`;
   const publicOrigin = deps.publicUrl ? new URL(deps.publicUrl).origin : null;
   const needAuth = () => {
     if (!deps.localAuth) throw new DomainError(404, 'not_found', 'no such route');
@@ -98,9 +100,12 @@ export function createApp(deps: AppDeps) {
     // ---------- sign-in and links (no session) ----------
     {
       kind: 'public', method: 'POST', pattern: /^\/api\/v1\/auth\/sign-in$/,
-      handler: async ({ body, correlationId, address, priorToken }) => {
-        const r = await needAuth().signIn(body, { address, correlationId, priorToken });
-        return { status: 200, body: sessionReply(r), headers: { 'set-cookie': sessionCookie(cookieName, r.token, deps.sessionMaxAgeS ?? 7 * 86400) } };
+      handler: async ({ body, correlationId, address, priorToken, deviceToken }) => {
+        const r = await needAuth().signIn(body, { address, correlationId, priorToken, deviceToken });
+        return {
+          status: 200, body: sessionReply(r),
+          headers: { 'set-cookie': [sessionCookie(cookieName, r.token, deps.sessionMaxAgeS ?? 7 * 86400), sessionCookie(deviceCookieName, r.deviceToken, 180 * 86400)] },
+        };
       },
     },
     {
@@ -119,7 +124,7 @@ export function createApp(deps: AppDeps) {
     },
     {
       kind: 'public', method: 'POST', pattern: /^\/api\/v1\/auth\/invitations\/accept$/,
-      handler: async ({ body, correlationId }) => ({ status: 200, body: await needAuth().acceptInvitation(body, correlationId) }),
+      handler: async ({ body, correlationId, address }) => ({ status: 200, body: await needAuth().acceptInvitation(body, correlationId, address) }),
     },
     // ---------- current session ----------
     { kind: 'session', method: 'GET', pattern: /^\/api\/v1\/auth\/session$/, allowRestricted: true, handler: async ({ session }) => ({ status: 200, body: sessionReply(session) }) },
@@ -134,7 +139,7 @@ export function createApp(deps: AppDeps) {
       kind: 'session', method: 'POST', pattern: /^\/api\/v1\/auth\/sessions\/revoke-all$/, allowRestricted: true,
       handler: async ({ session }) => ({ status: 200, body: { revoked: await needAuth().revokeAllForUser(session.userId, 'user_revoked_all') }, headers: { 'set-cookie': clearedCookie(cookieName) } }),
     },
-    { kind: 'session', method: 'POST', pattern: /^\/api\/v1\/auth\/totp\/enroll$/, allowRestricted: true, handler: async ({ session }) => ({ status: 200, body: await needAuth().beginTotp(session) }) },
+    { kind: 'session', method: 'POST', pattern: /^\/api\/v1\/auth\/totp\/enroll$/, allowRestricted: true, handler: async ({ session, body }) => ({ status: 200, body: await needAuth().beginTotp(session, body) }) },
     {
       kind: 'session', method: 'POST', pattern: /^\/api\/v1\/auth\/totp\/confirm$/, allowRestricted: true,
       handler: async ({ session, body, correlationId }) => {
@@ -253,7 +258,7 @@ export function createApp(deps: AppDeps) {
 
     const token = readCookie(req.headers.cookie, cookieName);
     const address = req.socket.remoteAddress ?? 'unknown';
-    if (route.kind === 'public') return route.handler({ body, correlationId, address, priorToken: token });
+    if (route.kind === 'public') return route.handler({ body, correlationId, address, priorToken: token, deviceToken: readCookie(req.headers.cookie, deviceCookieName) });
 
     const session = token ? await deps.auth.authenticate(token) : null;
     if (!session) return err(401, 'unauthenticated', 'sign in required');

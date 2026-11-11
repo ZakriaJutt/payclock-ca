@@ -23,7 +23,8 @@
     "rules:sync": "tsx scripts/rules-sync.ts",
     "golden-verify": "tsx scripts/golden-verify.ts",
     "orm-parity": "tsx scripts/orm-parity.ts",
-    "dev": "tsx scripts/dev.ts"
+    "dev": "tsx scripts/dev.ts",
+    "auth:operator-enrolment": "tsx scripts/operator-enrolment.ts"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

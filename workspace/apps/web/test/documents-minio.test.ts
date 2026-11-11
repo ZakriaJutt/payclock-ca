@@ -143,6 +143,26 @@ describe('B2 evidence files on MinIO', () => {
     expect(await keys(A.tenantId)).toHaveLength(1);
   });
 
+  it('B2-S05: prototype member names as entity_type, purpose or content type are 400, never 500', async () => {
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const q = `purpose=evidence&entity_type=${name}&entity_id=${invoiceA}`;
+      const res = await fetch(`${h.base}/api/v1/documents?${q}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', cookie: `__Host-payclock_session=${clients.aMember!.cookie}`, 'x-csrf-token': clients.aMember!.csrf!, 'idempotency-key': randomUUID() },
+        body: PDF,
+      });
+      expect({ name, status: res.status }).toEqual({ name, status: 400 });
+    }
+    expect((await upload(clients.aMember!, PDF, 'constructor', invoiceA)).status).toBe(400);
+    const purpose = await fetch(`${h.base}/api/v1/documents?purpose=valueOf&entity_type=invoice&entity_id=${invoiceA}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/pdf', cookie: `__Host-payclock_session=${clients.aMember!.cookie}`, 'x-csrf-token': clients.aMember!.csrf!, 'idempotency-key': randomUUID() },
+      body: PDF,
+    });
+    expect(purpose.status).toBe(400);
+    expect(await keys(A.tenantId)).toHaveLength(1);
+  });
+
   it('a file not marked clean by the scanner cannot be linked or downloaded', async () => {
     const csv = await upload(clients.aMember!, Buffer.from('invoice,date\nsynthetic,2026-10-01\n'), 'text/csv', invoiceA);
     expect(csv.status).toBe(201);

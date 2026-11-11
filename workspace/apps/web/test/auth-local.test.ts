@@ -36,7 +36,7 @@ function nextCode(): string {
 }
 
 async function clearAddressThrottle() {
-  await admin.pool.query("delete from auth_throttle where key like 'address:%' or key like 'account:%'");
+  await admin.pool.query('delete from auth_throttle');
 }
 
 beforeAll(async () => {
@@ -240,7 +240,8 @@ describe('B2 local sign-in (T-2.2.2, TRD 8.1)', () => {
   });
 
   describe('rate limiting and timeouts', () => {
-    it('repeated wrong passwords meet increasing delays (429 with Retry-After), even for the right password; nothing hard-locks', async () => {
+    it('repeated wrong passwords from one client meet increasing delays (429 with Retry-After) for that client, even with the right password; after the delay it works', async () => {
+      await clearAddressThrottle();
       const c = new Client(h.base);
       const code = nextCode(); // taken first: advancing the clock later would also end the delay
       for (let i = 0; i < 4; i++) expect((await c.signIn(ownerEmail, 'wrong password attempt')).status).toBe(401);
@@ -250,10 +251,9 @@ describe('B2 local sign-in (T-2.2.2, TRD 8.1)', () => {
       expect(limited.status).toBe(429);
       expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
       // Delays, not a lock: once the delay has passed the right credentials work again.
-      await admin.pool.query("update auth_throttle set next_allowed_at = now() - interval '1 second' where key = $1", [`account:${ownerEmail}`]);
-      await admin.pool.query("delete from auth_throttle where key like 'address:%'");
+      await admin.pool.query("update auth_throttle set next_allowed_at = now() - interval '1 second' where key like $1", [`%${ownerEmail}%`]);
       expect((await c.signIn(ownerEmail, ownerPassword, { totp_code: code })).status).toBe(200);
-      expect((await admin.pool.query('select count(*)::int as n from auth_throttle where key = $1', [`account:${ownerEmail}`])).rows[0].n).toBe(0);
+      expect((await admin.pool.query("select count(*)::int as n from auth_throttle where key like 'account:%' or key like 'pair:%'")).rows[0].n).toBe(0);
     });
 
     it('an unknown account gets the same answer as a wrong password and is throttled the same way', async () => {
@@ -314,7 +314,7 @@ describe('B2 local sign-in (T-2.2.2, TRD 8.1)', () => {
   });
 
   describe('operators', () => {
-    it('an operator without TOTP gets a restricted session that can only enrol an authenticator', async () => {
+    it('an operator without TOTP gets a restricted session; enrolment needs the out-of-band single-use code (B2-S06)', async () => {
       const opEmail = uniqueEmail('operator');
       await expect(h.auth.inviteFirstOwner(tenantB, opEmail, randomUUID())).rejects.toMatchObject({ code: 'owner_exists' });
       const id = randomUUID();
@@ -324,7 +324,14 @@ describe('B2 local sign-in (T-2.2.2, TRD 8.1)', () => {
       const r = await op.signIn(opEmail, 'new lighthouse keeper route');
       expect(r).toMatchObject({ status: 200, body: { restricted: true, tenant_id: null } });
       expect((await op.req('GET', '/api/v1/rules/versions')).body.code).toBe('totp_enrolment_required');
-      expect((await op.req('POST', `${PATH_AUTH}/totp/enroll`, {})).status).toBe(200);
+      // The password alone does not let anyone choose the operator's second factor.
+      expect((await op.req('POST', `${PATH_AUTH}/totp/enroll`, {})).body.code).toBe('enrolment_token_required');
+      expect((await op.req('POST', `${PATH_AUTH}/totp/enroll`, { enrolment_token: 'x'.repeat(43) })).status).toBe(410);
+      await h.auth.issueOperatorEnrolment(opEmail, randomUUID());
+      const mail = await waitForMail(opEmail, /authenticator/);
+      const code = /24 hours\):\s+([A-Za-z0-9_-]{43})\s/.exec(mail.text)![1]!;
+      expect((await op.req('POST', `${PATH_AUTH}/totp/enroll`, { enrolment_token: code })).status).toBe(200);
+      expect((await op.req('POST', `${PATH_AUTH}/totp/enroll`, { enrolment_token: code })).status).toBe(410); // single use
     });
   });
 });

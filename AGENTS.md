@@ -94,6 +94,7 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | `make test-unit`, `make test-integration` | Vitest; integration drops and re-migrates `payclock_test` first and needs Mailpit (SMTP 1025, API 8025) and MinIO (9000, bucket `payclock-dev`) running |
 | `make golden`, `make parity` | `scripts/golden-verify.ts`; `scripts/orm-parity.ts --test` |
 | `npm run db:migrate`, `npm run db:migrate-test`, `npm run seed` | Migrations plus queue schema; synthetic seed (refuses outside local/test) |
+| `npm run auth:operator-enrolment -- --email <operator>` | Emails an operator the single-use code needed to enrol their first authenticator (B2-S06) |
 | `npm run rules:sync [-- --test]` | New draft revision for any changed rule version, holiday table per s. 88 for 2018-2040, recompute of every stored deadline |
 
 Sign-in API (B2): `POST /api/v1/auth/sign-in`, `/auth/sign-out`, `/auth/sessions/revoke-all`, `/auth/password-reset/request`, `/auth/password-reset/complete`, `/auth/invitations/accept`, `/auth/totp/enroll`, `/auth/totp/confirm`, `GET /auth/session`; `POST /invitations`, `GET /memberships`, `DELETE /memberships/{id}`; `POST /documents`, `GET /documents/{id}/link`, `GET /documents/{id}/content`.

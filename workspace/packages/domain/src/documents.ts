@@ -16,14 +16,17 @@ import { DomainError, notFound, uuidField } from './errors.ts';
  * of that tenant; the file name is set by the server (V5.4.1).
  */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const TYPES: Record<string, { ext: string; sniff: (b: Buffer) => boolean }> = {
+const TYPES = new Map<string, { ext: string; sniff: (b: Buffer) => boolean }>(Object.entries({
   'application/pdf': { ext: 'pdf', sniff: (b) => b.subarray(0, 5).toString('latin1') === '%PDF-' },
   'image/png': { ext: 'png', sniff: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
   'image/jpeg': { ext: 'jpg', sniff: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  'text/csv': { ext: 'csv', sniff: (b) => !b.includes(0) && isUtf8(b) && !/^(MZ|\x7fELF|#!)/.test(b.subarray(0, 4).toString('latin1')) },
-};
+  'text/csv': { ext: 'csv', sniff: (b: Buffer) => !b.includes(0) && isUtf8(b) && !/^(MZ|\x7fELF|#!)/.test(b.subarray(0, 4).toString('latin1')) },
+}));
 const PURPOSES: ReadonlySet<string> = new Set(['evidence', 'import', 'action_pdf', 'sent_copy', 'export']);
-const ENTITY_TABLE: Record<StorageEntity, string> = { project: 'project', subcontract: 'subcontract', invoice: 'invoice', event: 'event' };
+const ENTITY_TABLE = new Map<string, string>([['project', 'project'], ['subcontract', 'subcontract'], ['invoice', 'invoice'], ['event', 'event']]);
+/** B2-S05: names of Object.prototype members (`constructor`, `__proto__`, `toString`, ...) are refused with 400 before any lookup. */
+const PROTO_NAMES: ReadonlySet<string> = new Set([...Object.getOwnPropertyNames(Object.prototype), '__proto__', 'prototype']);
+const isProtoName = (v: unknown) => typeof v === 'string' && PROTO_NAMES.has(v);
 export const LINK_TTL_S = 300;
 
 function isUtf8(b: Buffer): boolean {
@@ -42,7 +45,7 @@ export interface FileScanner {
 /** Local and test only (config refuses it elsewhere): re-checks the signature; it is not a malware scan. */
 export const localSignatureScanner: FileScanner = {
   async scan(body, mime) {
-    return TYPES[mime]?.sniff(body) ? 'clean' : 'rejected';
+    return TYPES.get(mime)?.sniff(body) ? 'clean' : 'rejected';
   },
 };
 /** No scanner configured: every file stays `pending` and cannot be downloaded. */
@@ -63,19 +66,20 @@ export async function uploadDocument(
   input: { purpose: unknown; entity_type: unknown; entity_id: unknown; mime: string; body: Buffer },
 ): Promise<Record<string, unknown>> {
   authorize(actor, 'write_records');
+  if ([input.purpose, input.entity_type, input.entity_id, input.mime].some(isProtoName)) throw new DomainError(400, 'bad_request', 'field value not allowed');
   if (typeof input.purpose !== 'string' || !PURPOSES.has(input.purpose)) throw new DomainError(422, 'unprocessable', 'unknown purpose', ['purpose']);
-  if (typeof input.entity_type !== 'string' || !(input.entity_type in ENTITY_TABLE)) throw new DomainError(422, 'unprocessable', 'unknown entity_type', ['entity_type']);
+  if (typeof input.entity_type !== 'string' || !ENTITY_TABLE.has(input.entity_type)) throw new DomainError(422, 'unprocessable', 'unknown entity_type', ['entity_type']);
   const entityId = uuidField(input.entity_id, 'entity_id');
   const purpose = input.purpose as StoragePurpose;
   const entityType = input.entity_type as StorageEntity;
-  const type = TYPES[input.mime];
+  const type = TYPES.get(input.mime);
   if (!type) throw new DomainError(415, 'unsupported_media_type', 'accepted types: PDF, PNG, JPEG, CSV', ['content-type']);
   if (input.body.length === 0 || input.body.length > MAX_FILE_BYTES) throw new DomainError(413, 'payload_too_large', 'files are 1 byte to 10 MB');
   if (!type.sniff(input.body)) throw new DomainError(415, 'unsupported_media_type', 'file content does not match its declared type', ['content-type']);
 
   // The entity must be readable in this tenant (row-level security): otherwise 404, nothing stored.
   const exists = await deps.db.withTenant(actor.tenantId, async (tx) =>
-    (await tx.raw.query(`select 1 from ${ENTITY_TABLE[entityType]} where id = $1`, [entityId])).rowCount);
+    (await tx.raw.query(`select 1 from ${ENTITY_TABLE.get(entityType)!} where id = $1`, [entityId])).rowCount);
   if (!exists) throw notFound(entityType);
 
   const key = storageKey({ tenantId: actor.tenantId, purpose, entityId, ext: type.ext });
@@ -129,7 +133,7 @@ export async function downloadDocument(deps: DocumentDeps, actor: Actor, documen
   if (expN * 1000 <= (deps.now ?? Date.now)()) throw new DomainError(403, 'link_expired', 'this link has expired; request a new one');
   const doc = await readDocument(deps, actor, id);
   const body = await deps.store.get(actor.tenantId, doc.storage_key);
-  const ext = TYPES[doc.mime]?.ext ?? 'bin';
+  const ext = TYPES.get(doc.mime)?.ext ?? 'bin';
   await deps.db.withTenant(actor.tenantId, (tx) => audit(tx, actor, 'document.downloaded', 'source_document', id));
   return { body, mime: doc.mime, filename: `${doc.purpose}-${doc.id}.${ext}` };
 }
