@@ -1,6 +1,6 @@
 import { and, eq, inArray, tables, type Tx } from '@payclock/db';
 import { authorize, type Actor } from './actor.ts';
-import { notFound } from './errors.ts';
+import { notFound, uuidField } from './errors.ts';
 
 type Deadline = typeof tables.deadline.$inferSelect;
 
@@ -31,6 +31,7 @@ export function presentDeadline(d: Deadline) {
 
 export async function getInvoice(tx: Tx, actor: Actor, invoiceId: string) {
   authorize(actor, 'read');
+  invoiceId = uuidField(invoiceId, 'invoice_id');
   const [inv] = await tx.select().from(tables.invoice).where(eq(tables.invoice.id, invoiceId));
   if (!inv) throw notFound('invoice');
   const [sc] = await tx.select().from(tables.subcontract).where(eq(tables.subcontract.id, inv.subcontractId));
@@ -61,6 +62,7 @@ export async function getInvoice(tx: Tx, actor: Actor, invoiceId: string) {
 /** S-09 diff: per deadline old and new date, rule version, cause event, user, time (Decision 4.5). */
 export async function getRecomputation(tx: Tx, actor: Actor, runId: string) {
   authorize(actor, 'read');
+  runId = uuidField(runId, 'recomputation_id');
   const [run] = await tx.select().from(tables.computationRun).where(eq(tables.computationRun.id, runId));
   if (!run) throw notFound('recomputation');
   const created = await tx.select().from(tables.deadline).where(eq(tables.deadline.computationRunId, runId));

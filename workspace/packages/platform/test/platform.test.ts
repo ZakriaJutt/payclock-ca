@@ -12,6 +12,15 @@ describe('T-2.1.5 platform', () => {
     expect(() => loadConfig({ APP_ENV: 'local' })).toThrow(/DATABASE_URL/);
   });
 
+  it('B1-008: fake auth is refused unless bind address, database and public URL are all local', () => {
+    const base = { APP_ENV: 'local', DATABASE_URL: DB, AUTH_MODE: 'fake' };
+    expect(loadConfig(base).AUTH_MODE).toBe('fake');
+    expect(() => loadConfig({ ...base, APP_PUBLIC_URL: 'https://app.payclock.example' })).toThrow(/APP_PUBLIC_URL/);
+    expect(() => loadConfig({ ...base, DATABASE_URL: 'postgres://u@db.payclock.example:5432/x' })).toThrow(/DATABASE_URL/);
+    expect(() => loadConfig({ ...base, API_BIND_HOST: '0.0.0.0' })).toThrow(/API_BIND_HOST/);
+    expect(loadConfig({ ...base, APP_PUBLIC_URL: 'http://localhost:3104' }).API_BIND_HOST).toBe('127.0.0.1');
+  });
+
   it('logger: carries the correlation id and redacts amounts, names, emails and tokens (redaction test)', () => {
     const lines: string[] = [];
     const log = createLogger({ service: 'test', sink: (l) => lines.push(l) });

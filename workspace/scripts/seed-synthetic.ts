@@ -20,7 +20,8 @@ const TENANTS = [
 ];
 const admin = new TenantDb(config.MIGRATOR_DATABASE_URL!, 2);
 const app = new TenantDb(config.DATABASE_URL, 2);
-await syncDraftRules(admin, [2025, 2026, 2027, 2028]);
+const sync = await syncDraftRules(admin, undefined, { app });
+console.log(`rules: ${JSON.stringify(sync)}`);
 const sessions: Record<string, { user_id: string; tenant_id: string }> = {};
 for (const t of TENANTS) {
   const fresh = await admin.withGlobalWrite(async (tx) => {

@@ -1,56 +1,142 @@
-import { eq, tables, type TenantDb } from '@payclock/db';
-import { HOLIDAY_SOURCE, ontarioHolidayRows, RULE_VERSIONS } from '@payclock/rules';
+import { randomUUID } from 'node:crypto';
+import { tables, type TenantDb } from '@payclock/db';
+import { canonicalJson, HOLIDAY_SOURCE, ontarioHolidayRows, RULE_VERSIONS, sha256Hex, type RuleVersion } from '@payclock/rules';
+import { recomputeBatch } from './batch.ts';
+
+/** Years the holiday table is loaded for: every year a seeded version can count in, with margin. */
+export const HOLIDAY_YEARS: readonly number[] = Array.from({ length: 23 }, (_, i) => 2018 + i); // 2018-2040
+
+export interface SyncReport {
+  newRevisions: string[];
+  approvedDiffering: string[];
+  holidaysAdded: number;
+  holidaysRemoved: number;
+  recompute: { projects: number; written: number; unchanged: number; failed: string[] };
+}
+
+function contentHash(v: RuleVersion): string {
+  return sha256Hex(canonicalJson({ family: v.family, jurisdiction: v.jurisdiction, effectiveFrom: v.effectiveFrom, effectiveTo: v.effectiveTo, legalSource: v.legalSource, clocks: v.clocks }));
+}
 
 /**
- * Load the encoded rule versions as `draft` rows and the holiday table (migrator connection only).
- * Approved versions are never touched (the database trigger also refuses). A draft whose content
- * changed has its clocks replaced; drafting and approval by two different operators is T-4.3.8.
+ * Bring the database rule tables and holiday table in line with the encoded rules (migrator
+ * connection only), then recompute every stored deadline if anything changed (B1-005).
+ * - A version whose content differs from the live row becomes a NEW draft revision; the old
+ *   revision is retired, never edited, so deadlines keep pointing at the rows they were made from.
+ * - An approved version is never touched; a difference is reported for the operator (T-4.3.8).
+ * - Generated holiday rows not produced by the current rule are removed, missing ones added,
+ *   operator-added rows (other sources, e.g. proclaimed days) kept; every change is audited.
+ * - Any change recomputes every project of every tenant; each recompute writes a computation_run
+ *   (cause rule_version or holiday_table) and an audit row.
  */
-export async function syncDraftRules(db: TenantDb, holidayYears: number[]): Promise<{ versions: number; holidays: number }> {
-  return db.withGlobalWrite(async (tx) => {
+export async function syncDraftRules(admin: TenantDb, holidayYears: readonly number[] = HOLIDAY_YEARS, opts: { app?: TenantDb } = {}): Promise<SyncReport> {
+  const correlationId = randomUUID();
+  const report: SyncReport = { newRevisions: [], approvedDiffering: [], holidaysAdded: 0, holidaysRemoved: 0, recompute: { projects: 0, written: 0, unchanged: 0, failed: [] } };
+  await admin.withGlobalWrite(async (tx) => {
     for (const v of RULE_VERSIONS) {
-      const [existing] = await tx.select().from(tables.ruleVersion).where(eq(tables.ruleVersion.code, v.code));
-      if (existing && existing.status !== 'draft') continue;
-      let id = existing?.id;
-      if (!id) {
-        const [row] = await tx
-          .insert(tables.ruleVersion)
-          .values({ code: v.code, family: v.family, jurisdiction: v.jurisdiction, effectiveFrom: v.effectiveFrom, effectiveTo: v.effectiveTo, status: 'draft', legalSource: v.legalSource })
-          .returning({ id: tables.ruleVersion.id });
-        id = row!.id;
-      } else {
-        await tx.update(tables.ruleVersion).set({ family: v.family, effectiveFrom: v.effectiveFrom, effectiveTo: v.effectiveTo, legalSource: v.legalSource }).where(eq(tables.ruleVersion.id, id));
-        const used = await tx.raw.query('select 1 from deadline d join rule_clock c on c.id = d.rule_clock_id where c.rule_version_id = $1 limit 1', [id]);
-        if (used.rowCount) continue; // a draft already referenced by deadlines keeps its rows
-        await tx.delete(tables.ruleClock).where(eq(tables.ruleClock.ruleVersionId, id));
+      const hash = contentHash(v);
+      const live = (await tx.raw.query<{ id: string; status: string; content_sha256: string | null }>(
+        "select id, status, content_sha256 from rule_version where code = $1 and status <> 'retired'", [v.code])).rows[0];
+      if (live && live.content_sha256 === hash) continue;
+      if (live && live.status === 'approved') {
+        report.approvedDiffering.push(v.code);
+        continue;
       }
+      if (live) await tx.raw.query("update rule_version set status = 'retired' where id = $1", [live.id]);
+      const rev = (await tx.raw.query<{ n: number }>('select coalesce(max(revision), 0)::int + 1 as n from rule_version where code = $1', [v.code])).rows[0]!.n;
+      const [row] = await tx
+        .insert(tables.ruleVersion)
+        .values({ code: v.code, revision: rev, contentSha256: hash, family: v.family, jurisdiction: v.jurisdiction, effectiveFrom: v.effectiveFrom, effectiveTo: v.effectiveTo, status: 'draft', legalSource: v.legalSource })
+        .returning({ id: tables.ruleVersion.id });
       for (const c of v.clocks) {
         await tx.insert(tables.ruleClock).values({
-          ruleVersionId: id,
-          clockCode: c.clockCode,
-          variant: c.variant,
-          triggerSpec: c.triggerSpec,
-          pendingQuestion: c.pendingQuestion,
-          offsetDays: c.offsetDays,
-          windowEndDays: c.windowEndDays,
-          extendOnHoliday: c.extendOnHoliday,
-          actByBufferDays: c.actByBufferDays,
-          sectionRef: c.sectionRef,
-          computed: c.computed,
-          notComputedReason: c.notComputedReason,
+          ruleVersionId: row!.id, clockCode: c.clockCode, variant: c.variant, triggerSpec: c.triggerSpec, pendingQuestion: c.pendingQuestion,
+          offsetDays: c.offsetDays, windowEndDays: c.windowEndDays, extendOnHoliday: c.extendOnHoliday, actByBufferDays: c.actByBufferDays,
+          sectionRef: c.sectionRef, computed: c.computed, notComputedReason: c.notComputedReason,
         });
       }
+      await tx.raw.query(
+        "insert into audit_event (tenant_id, actor_id, action, entity_type, entity_id, after_hash, correlation_id) values (null, null, 'rule_version.revision', 'rule_version', $1, decode($2, 'hex'), $3)",
+        [row!.id, hash, correlationId],
+      );
+      report.newRevisions.push(`${v.code} r${rev}`);
     }
-    let holidays = 0;
-    for (const y of holidayYears) {
-      for (const h of ontarioHolidayRows(y)) {
-        const r = await tx.raw.query(
-          'insert into holiday (jurisdiction, day, name, source) values ($1, $2, $3, $4) on conflict do nothing',
-          [h.jurisdiction, h.day, h.name, HOLIDAY_SOURCE],
-        );
-        holidays += r.rowCount ?? 0;
+
+    for (const year of holidayYears) {
+      const want = ontarioHolidayRows(year);
+      const have = (await tx.raw.query<{ day: string; name: string; source: string }>(
+        "select day, name, source from holiday where jurisdiction = 'ON' and extract(year from day) = $1", [year])).rows;
+      for (const h of have) {
+        const generated = h.source.startsWith('Legislation Act, 2006');
+        if (generated && !want.some((w) => w.day === h.day)) {
+          await tx.raw.query("delete from holiday where jurisdiction = 'ON' and day = $1", [h.day]);
+          report.holidaysRemoved++;
+        }
       }
+      for (const w of want) {
+        const r = await tx.raw.query(
+          `insert into holiday (jurisdiction, day, name, source) values ($1, $2, $3, $4)
+           on conflict (jurisdiction, day) do update set name = excluded.name, source = excluded.source
+           where holiday.source <> excluded.source or holiday.name <> excluded.name
+           returning (xmax = 0) as inserted`,
+          [w.jurisdiction, w.day, w.name, HOLIDAY_SOURCE],
+        );
+        if (r.rows[0]?.inserted) report.holidaysAdded++;
+      }
+      await tx.raw.query("insert into holiday_coverage (jurisdiction, year, source) values ('ON', $1, $2) on conflict do nothing", [year, HOLIDAY_SOURCE]);
     }
-    return { versions: RULE_VERSIONS.length, holidays };
+    if (report.holidaysAdded || report.holidaysRemoved) {
+      await tx.raw.query(
+        "insert into audit_event (tenant_id, actor_id, action, entity_type, entity_id, after_hash, correlation_id) values (null, null, 'holiday_table.change', 'holiday', null, decode($1, 'hex'), $2)",
+        [sha256Hex(`${report.holidaysAdded}+${report.holidaysRemoved}`), correlationId],
+      );
+    }
   });
+
+  if (report.newRevisions.length || report.holidaysAdded || report.holidaysRemoved) {
+    report.recompute = await recomputeAll(admin, opts.app ?? admin, report.newRevisions.length ? 'rule_version' : 'holiday_table', correlationId);
+  }
+  return report;
+}
+
+/** Recompute every project of every tenant (listed through the migrator), retrying a run that a
+ * concurrent correction made stale (compare-and-set discards it). */
+export async function recomputeAll(admin: TenantDb, app: TenantDb, cause: 'rule_version' | 'holiday_table', correlationId: string) {
+  const projects = (await admin.pool.query<{ id: string; tenant_id: string }>('select id, tenant_id from project order by tenant_id, id')).rows;
+  const out = { projects: projects.length, written: 0, unchanged: 0, failed: [] as string[] };
+  for (const p of projects) {
+    let done = false;
+    for (let attempt = 0; attempt < 3 && !done; attempt++) {
+      const r = await recomputeBatch(app, p.tenant_id, p.id, correlationId, { cause });
+      if (r.status === 'written') out.written++;
+      if (r.status === 'unchanged') out.unchanged++;
+      done = r.status !== 'discarded';
+    }
+    if (!done) out.failed.push(p.id);
+  }
+  return out;
+}
+
+/**
+ * Operator holiday change (s. 88(2) para. 12, a day proclaimed by the Governor General or
+ * Lieutenant Governor): add or remove one row, audit it, and recompute every stored deadline.
+ */
+export async function changeProclaimedHoliday(
+  admin: TenantDb,
+  app: TenantDb,
+  change: { day: string; name: string; source: string; remove?: boolean },
+) {
+  if (change.source.startsWith('Legislation Act, 2006')) throw new Error('generated rows are managed by syncDraftRules');
+  const correlationId = randomUUID();
+  await admin.withGlobalWrite(async (tx) => {
+    const r = change.remove
+      ? await tx.raw.query("delete from holiday where jurisdiction = 'ON' and day = $1 and source = $2", [change.day, change.source])
+      : await tx.raw.query("insert into holiday (jurisdiction, day, name, source) values ('ON', $1, $2, $3) on conflict do nothing", [change.day, change.name, change.source]);
+    if (!r.rowCount) throw new Error('holiday change had no effect');
+    await tx.raw.query(
+      "insert into audit_event (tenant_id, actor_id, action, entity_type, entity_id, after_hash, correlation_id) values (null, null, $1, 'holiday', null, decode($2, 'hex'), $3)",
+      [change.remove ? 'holiday.remove' : 'holiday.add', sha256Hex(`${change.day}|${change.source}`), correlationId],
+    );
+  });
+  return recomputeAll(admin, app, 'holiday_table', correlationId);
 }

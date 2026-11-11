@@ -1,4 +1,4 @@
-import { and, asc, eq, tables, type Tx } from '@payclock/db';
+import { and, asc, eq, ne, tables, type Tx } from '@payclock/db';
 import { civil, type CivilDate, type ClockCode, type LawyerFlag, type RuleVersion, type TriggerSpec } from '@payclock/rules';
 
 export interface LoadedRules {
@@ -6,13 +6,15 @@ export interface LoadedRules {
   /** rule_clock.id by `${versionCode}|${clockCode}|${variant}` */
   clockIds: Map<string, string>;
   holidays: CivilDate[];
+  holidayYears: number[];
 }
 
 /** Rule versions and holidays as data from the database (AD-03); the engine receives them as input. */
 export async function loadRules(tx: Tx): Promise<LoadedRules> {
-  const versions = await tx.select().from(tables.ruleVersion).where(eq(tables.ruleVersion.jurisdiction, 'ON')).orderBy(asc(tables.ruleVersion.effectiveFrom));
+  const versions = await tx.select().from(tables.ruleVersion).where(and(eq(tables.ruleVersion.jurisdiction, 'ON'), ne(tables.ruleVersion.status, 'retired'))).orderBy(asc(tables.ruleVersion.effectiveFrom));
   const clocks = await tx.select().from(tables.ruleClock);
-  const holidays = await tx.select({ day: tables.holiday.day }).from(tables.holiday).where(and(eq(tables.holiday.jurisdiction, 'ON')));
+  const holidays = await tx.select({ day: tables.holiday.day }).from(tables.holiday).where(eq(tables.holiday.jurisdiction, 'ON'));
+  const coverage = await tx.select({ year: tables.holidayCoverage.year }).from(tables.holidayCoverage).where(eq(tables.holidayCoverage.jurisdiction, 'ON'));
   const clockIds = new Map<string, string>();
   const out: RuleVersion[] = versions.map((v) => ({
     code: v.code,
@@ -43,5 +45,5 @@ export async function loadRules(tx: Tx): Promise<LoadedRules> {
       })
       .sort((a, b) => `${a.clockCode}${a.variant}`.localeCompare(`${b.clockCode}${b.variant}`)),
   }));
-  return { versions: out, clockIds, holidays: holidays.map((h) => civil(h.day)).sort() };
+  return { versions: out, clockIds, holidays: holidays.map((h) => civil(h.day)).sort(), holidayYears: coverage.map((c) => c.year).sort((a, b) => a - b) };
 }

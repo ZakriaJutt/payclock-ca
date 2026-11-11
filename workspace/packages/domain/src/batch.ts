@@ -1,5 +1,5 @@
 import { eq, tables, type TenantDb } from '@payclock/db';
-import { computeProject, loadProjectFacts, writeComputation, type ComputedScope } from './recompute.ts';
+import { computeProject, loadProjectFacts, ruleClockIdFor, writeComputation, type ComputedScope } from './recompute.ts';
 import { loadRules } from './rules-data.ts';
 
 export type BatchOutcome = { status: 'written'; runId: string } | { status: 'discarded'; reason: string } | { status: 'unchanged' };
@@ -15,7 +15,7 @@ export async function recomputeBatch(
   tenantId: string,
   projectId: string,
   correlationId: string,
-  hooks: { afterRead?: () => Promise<void> } = {},
+  hooks: { afterRead?: () => Promise<void>; cause?: 'rule_version' | 'holiday_table' } = {},
 ): Promise<BatchOutcome> {
   const read = await db.withTenant(tenantId, async (tx) => {
     const facts = await loadProjectFacts(tx, projectId);
@@ -29,17 +29,18 @@ export async function recomputeBatch(
     const locked = await tx.raw.query<{ fact_version: number }>('select fact_version from project where id = $1 for update', [projectId]);
     const now = locked.rows[0]?.fact_version;
     if (now !== read.factVersion) return { status: 'discarded', reason: `fact_version moved from ${read.factVersion} to ${now}` } as const;
-    if (await sameAsCurrent(tx, read.computed)) return { status: 'unchanged' } as const;
+    if (await sameAsCurrent(tx, read.computed, read.clockIds)) return { status: 'unchanged' } as const;
     const res = await writeComputation(
       tx, null, tenantId,
-      { projectId, scopeType: 'project', scopeId: projectId, cause: 'rule_version', causeEventId: null },
+      { projectId, scopeType: 'project', scopeId: projectId, cause: hooks.cause ?? 'rule_version', causeEventId: null },
       read.computed, read.factVersion, read.clockIds, correlationId,
     );
     return { status: 'written', runId: res.runId } as const;
   });
 }
 
-async function sameAsCurrent(tx: Parameters<Parameters<TenantDb['withTenant']>[1]>[0], computed: ComputedScope[]): Promise<boolean> {
+/** Same dates AND the same rule rows: a deadline on a retired rule revision is never "unchanged". */
+async function sameAsCurrent(tx: Parameters<Parameters<TenantDb['withTenant']>[1]>[0], computed: ComputedScope[], clockIds: Map<string, string>): Promise<boolean> {
   for (const scope of computed) {
     const current = await tx.select().from(tables.deadline).where(eq(tables.deadline.subcontractId, scope.subcontractId));
     const cur = current.filter((d) => d.isCurrent);
@@ -47,6 +48,7 @@ async function sameAsCurrent(tx: Parameters<Parameters<TenantDb['withTenant']>[1
     for (const r of scope.results) {
       const d = cur.find((x) => x.clockCode === r.clockCode && x.variant === r.variant && x.invoiceId === r.invoiceId);
       if (!d || d.statutoryDate !== r.statutoryDate || d.state !== r.state || d.bound !== r.bound || d.actByDate !== r.actByDate) return false;
+      if (d.ruleClockId !== ruleClockIdFor(r, clockIds)) return false;
     }
   }
   return true;

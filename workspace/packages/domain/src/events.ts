@@ -2,7 +2,7 @@ import { and, eq, isNull, tables, type Tx } from '@payclock/db';
 import { EVENT_SCOPE, EVENT_TYPES, isCivilDate, SERIES_EVENT_TYPES, type EventType } from '@payclock/rules';
 import { authorize, type Actor } from './actor.ts';
 import { audit } from './audit.ts';
-import { conflict, notFound, unprocessable } from './errors.ts';
+import { conflict, notFound, unprocessable, uuidField } from './errors.ts';
 import { recomputeInTx, type RecomputeResult } from './recompute.ts';
 
 type DbEvent = typeof tables.event.$inferSelect;
@@ -71,25 +71,25 @@ export async function addEvent(tx: Tx, actor: Actor, input: EventInput): Promise
   if (!EVENT_TYPES.includes(type)) throw unprocessable('unknown event type', ['type']);
   const scopeType = input.scope_type as string;
   if (EVENT_SCOPE[type] !== scopeType) throw unprocessable(`${type} belongs to scope ${EVENT_SCOPE[type]}`, ['scope_type']);
-  if (typeof input.scope_id !== 'string') throw unprocessable('scope_id is required', ['scope_id']);
+  const scopeId = uuidField(input.scope_id, 'scope_id');
   const seriesKey = input.series_key === undefined || input.series_key === null ? 'main' : String(input.series_key);
   if (!/^[a-z0-9-]{1,40}$/.test(seriesKey)) throw unprocessable('series_key must be short lowercase text', ['series_key']);
   if (seriesKey !== 'main' && !SERIES_EVENT_TYPES.has(type)) throw unprocessable(`${type} occurs once per scope`, ['series_key']);
   const fields = dateFields(type, input);
-  const { projectId, subcontractId } = await projectOf(tx, scopeType, input.scope_id);
+  const { projectId, subcontractId } = await projectOf(tx, scopeType, scopeId);
   // Lock the project row first: all fact writes for one project serialise here.
   await tx.raw.query('select 1 from project where id = $1 for update', [projectId]);
   const [existing] = await tx
     .select({ id: tables.event.id, version: tables.event.version })
     .from(tables.event)
-    .where(and(eq(tables.event.scopeId, input.scope_id), eq(tables.event.eventType, type), eq(tables.event.seriesKey, seriesKey), isNull(tables.event.supersededAt)));
+    .where(and(eq(tables.event.scopeId, scopeId), eq(tables.event.eventType, type), eq(tables.event.seriesKey, seriesKey), isNull(tables.event.supersededAt)));
   if (existing) throw conflict('event_exists', 'this event is already recorded; correct it instead', { event_id: existing.id, version: existing.version });
   const [ev] = await tx
     .insert(tables.event)
     .values({
       tenantId: actor.tenantId,
       scopeType: scopeType as DbEvent['scopeType'],
-      scopeId: input.scope_id,
+      scopeId: scopeId,
       eventType: type,
       seriesKey,
       deliveryMethod: typeof input.delivery_method === 'string' ? input.delivery_method.slice(0, 40) : null,
@@ -101,7 +101,7 @@ export async function addEvent(tx: Tx, actor: Actor, input: EventInput): Promise
   const recomputation = await recomputeInTx(tx, actor, {
     projectId,
     scopeType: scopeType as DbEvent['scopeType'],
-    scopeId: input.scope_id,
+    scopeId: scopeId,
     cause: 'new_event',
     causeEventId: ev!.id,
     subcontractIds: subcontractId ? [subcontractId] : undefined,
@@ -132,6 +132,7 @@ export async function correctEvent(
   fault?: () => void,
 ): Promise<{ event: DbEvent; recomputation: RecomputeResult }> {
   authorize(actor, 'write_events');
+  eventId = uuidField(eventId, 'event_id');
   if (typeof input.reason !== 'string' || input.reason.trim() === '') throw unprocessable('a correction needs a reason', ['reason']);
   if (typeof input.expected_version !== 'number') throw unprocessable('expected_version is required', ['expected_version']);
   const [found] = await tx.select().from(tables.event).where(eq(tables.event.id, eventId));

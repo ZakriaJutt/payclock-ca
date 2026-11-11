@@ -86,10 +86,18 @@ export function computeProject(facts: ProjectFacts, rules: Awaited<ReturnType<ty
       events,
       ruleVersions: rules.versions,
       holidays: rules.holidays,
+      holidayYears: rules.holidayYears,
     });
     out.push({ subcontractId: sc.id, inputsHash: res.inputsHash, results: res.results });
   }
   return out;
+}
+
+/** The rule_clock row a result was computed from (series clocks share the variant '' row). */
+export function ruleClockIdFor(r: ClockResult, clockIds: Map<string, string>): string | null {
+  if (!r.ruleVersionCode) return null;
+  const variant = ['CLK-03', 'CLK-06', 'CLK-07', 'CLK-14', 'CLK-16', 'CLK-17'].includes(r.clockCode) ? '' : r.variant;
+  return clockIds.get(`${r.ruleVersionCode}|${r.clockCode}|${variant}`) ?? null;
 }
 
 const key = (subcontractId: string, invoiceId: string | null, clock: string, variant: string) => `${subcontractId}|${invoiceId ?? ''}|${clock}|${variant}`;
@@ -163,7 +171,7 @@ export async function writeComputation(
         .where(and(inArray(tables.reminder.deadlineId, current.map((d) => d.id)), eq(tables.reminder.status, 'scheduled')));
     }
     for (const r of scope.results) {
-      const ruleClockId = r.ruleVersionCode ? (clockIds.get(`${r.ruleVersionCode}|${r.clockCode}|${['CLK-03', 'CLK-06', 'CLK-07', 'CLK-14'].includes(r.clockCode) || (r.clockCode === 'CLK-16' || r.clockCode === 'CLK-17') ? '' : r.variant}`) ?? null) : null;
+      const ruleClockId = ruleClockIdFor(r, clockIds);
       const [d] = await tx
         .insert(tables.deadline)
         .values({
@@ -205,6 +213,12 @@ export async function writeComputation(
     }
   }
   if (actor) await audit(tx, actor, 'recomputation', 'computation_run', runId, undefined, { runHash, factVersionRead });
+  else {
+    await tx.insert(tables.auditEvent).values({
+      tenantId, actorId: null, action: `recomputation.${req.cause}`, entityType: 'computation_run', entityId: runId,
+      afterHash: Buffer.from(runHash, 'hex'), correlationId,
+    });
+  }
   return { runId, factVersion: factVersionRead, changed };
 }
 

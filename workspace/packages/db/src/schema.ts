@@ -183,6 +183,8 @@ export const legalSignoff = pgTable('legal_signoff', {
 export const ruleVersion = pgTable('rule_version', {
   id: uuid('id').primaryKey().defaultRandom(),
   code: text('code').notNull(),
+  revision: integer('revision').notNull().default(1),
+  contentSha256: text('content_sha256'),
   family: text('family').notNull(),
   jurisdiction: text('jurisdiction').notNull().default('ON'),
   effectiveFrom: civilDate('effective_from').notNull(),
@@ -193,7 +195,8 @@ export const ruleVersion = pgTable('rule_version', {
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   foreignKey({ name: 'rule_version_signoff_id_fkey', columns: [t.signoffId], foreignColumns: [legalSignoff.id] }),
-  unique('rule_version_code_key').on(t.code),
+  unique('rule_version_code_revision_key').on(t.code, t.revision),
+  uniqueIndex('rule_version_one_live_idx').on(t.code).where(sql`status <> 'retired'`),
   check('rule_version_signoff_check', sql`status <> 'approved' or signoff_id is not null`),
   index('rule_version_selection_idx').on(t.jurisdiction, t.effectiveFrom).where(sql`status = 'approved'`),
 ]);
@@ -224,6 +227,13 @@ export const holiday = pgTable('holiday', {
   source: text('source').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ name: 'holiday_pkey', columns: [t.jurisdiction, t.day] })]);
+
+export const holidayCoverage = pgTable('holiday_coverage', {
+  jurisdiction: text('jurisdiction').notNull(),
+  year: integer('year').notNull(),
+  source: text('source').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ name: 'holiday_coverage_pkey', columns: [t.jurisdiction, t.year] })]);
 
 export const interestRate = pgTable('interest_rate', {
   id: uuid('id').primaryKey().defaultRandom(),

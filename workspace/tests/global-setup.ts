@@ -11,6 +11,6 @@ export default async function setup(): Promise<void> {
   await migrate(url);
   await installQueueSchema(url, 'payclock_app', QUEUES);
   const db = new TenantDb(url, 2);
-  await syncDraftRules(db, [2025, 2026, 2027, 2028]);
+  await syncDraftRules(db);
   await db.close();
 }

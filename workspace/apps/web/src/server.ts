@@ -13,7 +13,7 @@ if (config.AUTH_MODE !== 'fake') throw new Error('only fake auth is implemented 
 const auth = FakeAuthProvider.fromEnv(config.FAKE_AUTH_SESSIONS);
 const server = createServer(createApp({ db, auth, logger, queue }));
 server.requestTimeout = 15_000;
-server.listen(config.API_PORT, '127.0.0.1', () => logger.info('web.listening', { port: config.API_PORT }));
+server.listen(config.API_PORT, config.API_BIND_HOST, () => logger.info('web.listening', { port: config.API_PORT }));
 const stop = async () => {
   server.close();
   await queue.stop();

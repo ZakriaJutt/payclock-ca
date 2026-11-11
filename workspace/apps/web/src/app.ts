@@ -34,7 +34,8 @@ interface Route {
   handler: Handler;
 }
 
-const ID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+const ID = '([^/]+)';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY = 64 * 1024;
 
 const routes: Route[] = [
@@ -61,7 +62,7 @@ const routes: Route[] = [
     method: 'GET', pattern: /^\/api\/v1\/rules\/versions$/, mutating: false,
     handler: async ({ tx }) => {
       const v = await tx.select().from(tables.ruleVersion);
-      return { status: 200, body: { versions: v.map((x) => ({ code: x.code, status: x.status, effective_from: x.effectiveFrom, effective_to: x.effectiveTo, legal_source: x.legalSource, signoff_id: x.signoffId })) } };
+      return { status: 200, body: { versions: v.map((x) => ({ code: x.code, revision: x.revision, status: x.status, effective_from: x.effectiveFrom, effective_to: x.effectiveTo, legal_source: x.legalSource, signoff_id: x.signoffId })) } };
     },
   },
 ];
@@ -106,6 +107,7 @@ export function createApp(deps: AppDeps) {
     const route = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));
     if (!route) return err(404, 'not_found', 'no such route');
     const params = route.pattern.exec(url.pathname)!.slice(1);
+    if (params.some((x) => !UUID.test(x))) return err(422, 'unprocessable', 'id must be a UUID', ['id']);
 
     const auth = req.headers.authorization;
     const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;

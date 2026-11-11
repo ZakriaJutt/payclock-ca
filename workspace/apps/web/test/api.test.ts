@@ -148,8 +148,10 @@ describe('API /api/v1 core path', () => {
 
   it('rule versions are listed with their (absent) sign-off', async () => {
     const r = await call(M(), 'GET', '/api/v1/rules/versions');
-    expect(r.body.versions.map((v: { code: string }) => v.code).sort()).toEqual(['ON-2019-10', 'ON-2026-01', 'ON-LEGACY', 'ON-NOPP']);
-    expect(r.body.versions.every((v: { status: string; signoff_id: null }) => v.status === 'draft' && v.signoff_id === null)).toBe(true);
+    const live = r.body.versions.filter((v: { status: string }) => v.status !== 'retired');
+    expect(live.map((v: { code: string }) => v.code).sort()).toEqual(['ON-2019-10', 'ON-2026-01', 'ON-LEGACY', 'ON-NOPP']);
+    expect(live.every((v: { status: string; signoff_id: null; revision: number }) => v.status === 'draft' && v.signoff_id === null && v.revision >= 1)).toBe(true);
+    expect(r.body.versions.every((v: { signoff_id: null }) => v.signoff_id === null)).toBe(true);
   });
 
   it('IT-12 (partial): request logs carry the correlation id and no amounts or names', () => {
@@ -157,5 +159,17 @@ describe('API /api/v1 core path', () => {
     expect(logLines.length).toBeGreaterThan(5);
     for (const l of logLines) expect(JSON.parse(l).correlation_id).toMatch(/^[0-9a-f-]{36}$/);
     for (const s of ['4800000', 'Harbourgate', 'Northline', 'INV-1042', 'Lakeshore']) expect(text).not.toContain(s);
+  });
+});
+
+describe('B1-007 malformed identifiers through the API', () => {
+  it('POST /events with a non-UUID scope_id and GET with a non-UUID path id are 422, not 500', async () => {
+    const M = `${A.tenantId}-member`;
+    const r = await post(M, '/api/v1/events', { scope_type: 'invoice', scope_id: 'not-a-uuid', type: 'EV-01', occurred_on: '2026-10-08', certainty: 'confirmed' });
+    expect(r.status).toBe(422);
+    expect(r.body.fields).toEqual(['scope_id']);
+    const g = await call(M, 'GET', '/api/v1/invoices/not-a-uuid');
+    expect(g.status).toBe(422);
+    expect(JSON.stringify(g.body)).not.toMatch(/uuid:|syntax|stack/i);
   });
 });

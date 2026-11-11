@@ -15,6 +15,7 @@
     "db:migrate-test": "tsx packages/db/src/migrate-cli.ts --test",
     "db:reset-test": "tsx scripts/db-reset-test.ts",
     "seed": "tsx scripts/seed-synthetic.ts",
+    "rules:sync": "tsx scripts/rules-sync.ts",
     "golden-verify": "tsx scripts/golden-verify.ts",
     "orm-parity": "tsx scripts/orm-parity.ts",
     "dev": "tsx scripts/dev.ts"

@@ -14,5 +14,10 @@ export async function invariantCheck(tx: Tx): Promise<string[]> {
        select 1 from event e where e.id = any(d.trigger_event_ids) and e.superseded_at is not null)`,
   );
   for (const r of stale.rows) out.push(`current deadline ${r.id} rests on a superseded event`);
+  const retired = await tx.raw.query(
+    `select d.id from deadline d join rule_clock c on c.id = d.rule_clock_id join rule_version v on v.id = c.rule_version_id
+     where d.is_current and v.status = 'retired'`,
+  );
+  for (const r of retired.rows) out.push(`current deadline ${r.id} rests on a retired rule version`);
   return out;
 }

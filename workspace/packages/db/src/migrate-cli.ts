@@ -1,4 +1,5 @@
-/** `npm run db:migrate [-- --test]`: SQL migrations, then the queue schema. Runs as the migrator. */
+/** `npm run db:migrate [-- --test]`: SQL migrations, then the queue schema. Runs as the migrator.
+ * Rule and holiday tables are synced by `npm run rules:sync` (also run by seed and `make dev`). */
 import { installQueueSchema, QUEUES } from '@payclock/platform';
 import { migrate } from './migrate.ts';
 import { loadEnvFile } from '../../../scripts/env.ts';

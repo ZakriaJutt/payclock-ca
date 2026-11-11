@@ -2,7 +2,7 @@ import { eq, tables, type Tx } from '@payclock/db';
 import { isCivilDate } from '@payclock/rules';
 import { authorize, type Actor } from './actor.ts';
 import { audit } from './audit.ts';
-import { conflict, notFound, unprocessable } from './errors.ts';
+import { conflict, notFound, unprocessable, uuidField } from './errors.ts';
 import { recomputeInTx } from './recompute.ts';
 
 const TRI = ['yes', 'no', 'unknown'] as const;
@@ -57,7 +57,7 @@ export async function createProject(tx: Tx, actor: Actor, input: ProjectInput) {
 
 export async function createSubcontract(tx: Tx, actor: Actor, input: { project_id: unknown; reference?: unknown; has_sub_subs?: unknown }) {
   authorize(actor, 'write_records');
-  const projectId = str(input.project_id, 'project_id', 64);
+  const projectId = uuidField(input.project_id, 'project_id');
   const [project] = await tx.select({ id: tables.project.id }).from(tables.project).where(eq(tables.project.id, projectId));
   if (!project) throw notFound('project');
   const hasSubSubs = input.has_sub_subs === undefined ? null : input.has_sub_subs;
@@ -77,7 +77,7 @@ export async function createInvoice(
   input: { subcontract_id: unknown; number: unknown; amount_cents: unknown; holdback_cents?: unknown; given_to_contractor_on?: unknown },
 ) {
   authorize(actor, 'write_records');
-  const subcontractId = str(input.subcontract_id, 'subcontract_id', 64);
+  const subcontractId = uuidField(input.subcontract_id, 'subcontract_id');
   const [sc] = await tx.select().from(tables.subcontract).where(eq(tables.subcontract.id, subcontractId));
   if (!sc) throw notFound('subcontract');
   const amount = cents(input.amount_cents, 'amount_cents');
