@@ -11,7 +11,7 @@ let projA: string;
 let runA: string;
 let ev07A: string;
 
-const TENANT_TABLES = ['tenant', 'membership', 'project', 'subcontract', 'invoice', 'event', 'computation_run', 'deadline', 'flag', 'reminder', 'audit_event', 'api_idempotency'];
+const TENANT_TABLES = ['tenant', 'membership', 'project', 'subcontract', 'invoice', 'event', 'computation_run', 'deadline', 'flag', 'reminder', 'audit_event', 'api_idempotency', 'recompute_pending'];
 
 beforeAll(async () => {
   A = await seedTenant(admin, 'Northline Electric Ltd.');
@@ -57,6 +57,32 @@ describe('IT-01 tenant isolation (database and domain layers)', () => {
       const b = await db.withTenant(B.tenantId, async (tx) => (await tx.raw.query(`select count(*)::int as n from ${t} where tenant_id = $1`, [A.tenantId])).rows[0].n);
       expect({ t, b }).toEqual({ t, b: 0 });
       if (['project', 'invoice', 'event', 'deadline', 'audit_event'].includes(t)) expect(a).toBeGreaterThan(0);
+    }
+  });
+
+  it('recompute_pending (round-3 hardening): FORCE RLS; an open row of A is invisible without context and to B, and B cannot write one for A', async () => {
+    const flags = await admin.pool.query("select relrowsecurity, relforcerowsecurity from pg_class where relname = 'recompute_pending'");
+    expect(flags.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+    await admin.pool.query(
+      "insert into recompute_pending (tenant_id, project_id, cause, rules_gen, holiday_gen, last_error) values ($1, $2, 'rule_version', 0, 0, 'synthetic error text') on conflict do nothing",
+      [A.tenantId, projA],
+    );
+    try {
+      expect((await db.pool.query('select count(*)::int as n from recompute_pending')).rows[0].n).toBe(0);
+      expect((await db.pool.query('update recompute_pending set last_error = null')).rowCount).toBe(0);
+      const seenByA = await db.withTenant(A.tenantId, async (tx) => (await tx.raw.query('select count(*)::int as n from recompute_pending where project_id = $1 and done_at is null', [projA])).rows[0].n);
+      const seenByB = await db.withTenant(B.tenantId, async (tx) => (await tx.raw.query('select count(*)::int as n from recompute_pending where tenant_id = $1', [A.tenantId])).rows[0].n);
+      expect({ seenByA, seenByB }).toEqual({ seenByA: 1, seenByB: 0 });
+      await expect(
+        db.withTenant(B.tenantId, (tx) => tx.raw.query("insert into recompute_pending (tenant_id, project_id, cause, rules_gen, holiday_gen) values ($1, $2, 'rule_version', 0, 0)", [A.tenantId, projA])),
+      ).rejects.toThrow(/row-level security/);
+      // The worker's cross-tenant queue functions return a count or identifiers only, never row text.
+      const count = await db.pool.query('select open_recompute_pending_count() as n');
+      expect(count.rows[0].n).toBeGreaterThanOrEqual(1);
+      const fn = await admin.pool.query("select pg_get_function_result('claim_recompute_pending(integer)'::regprocedure) as r");
+      expect(fn.rows[0].r).not.toContain('last_error');
+    } finally {
+      await admin.pool.query('update recompute_pending set done_at = now() where project_id = $1 and done_at is null', [projA]);
     }
   });
 

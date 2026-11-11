@@ -310,3 +310,40 @@ Fix round 2 edits (author; fixed after retest, not yet re-reviewed):
 Also fixed in this round: the round-1 rule-change test asserted absolute revision numbers and restored the database only on success, so a different file order left a changed rule in the shared test database; it now asserts relative revisions and restores in `finally`. The integration suite passed under five shuffled file orders (`--sequence.shuffle.files`, seeds 1-5). The reviewer's raw SQL in N-6 still reads the stored (superseded) row; the application read path never presents it.
 
 Residual: no alert yet on pending rows older than one hour; reminders are not sent in B1, so the send-time re-check that would refuse a reminder for a pending deadline (TRD 6.1) is not built.
+
+### 9.8 Retest round 3 verdicts and round-3 hardening (2026-11-11)
+
+Reviewer verdicts from `_coordination/review/payclock-ca-b1-verdicts.json` (round 3, head `891037c`), copied unchanged:
+
+| Finding | Verdict |
+|---|---|
+| B1-001 | Closed |
+| B1-002 | Closed |
+| B1-003 | Closed |
+| B1-004 | Closed, part open: an estimated EV-11 or EV-12 wrong by more than 365 days still gives exact computed rights dates under POST-2019, flagged REGIME_ESTIMATED only; the 365-day reach is a labelled proposal awaiting the lawyer (L-06) |
+| B1-005 | Closed |
+| B1-006 | Closed |
+| B1-007 | Closed |
+| B1-008 | Closed |
+| B1-009 | Closed |
+
+Reviewer reproduction (round 3): lint clean, typecheck clean, unit 83/83, integration 49/49, golden 15/15, ORM parity 0, reviewer round-1 engine 34/34, round-1 integration 25/25, round-2 25/25 + N-6 pass, round-3 new 10/10. New findings: none.
+
+Hardening of two round-3 observations (section 5 of `payclock-ca-b1-round3.md`), **fixed after round-3 retest, lead-checked**:
+
+| Item | Fix | Test |
+|---|---|---|
+| `recompute_pending` had no row-level security | Migration `20261111T400000_recompute_pending_rls.sql`: tenant foreign key, RLS enabled and FORCED, policy `recompute_pending_isolation` (`tenant_id = app_current_tenant()`), insert grant; ORM model matches (`tenantPolicy`, `enableRLS`). The worker claims rows through SECURITY DEFINER `claim_recompute_pending(limit)` (identifiers only, no `last_error`) and counts through `open_recompute_pending_count()`; each outcome is written inside that row's tenant transaction. The drain now closes a row only if its generation is still the one the recompute reached (the "closed early" observation) | `isolation.test.ts`: `recompute_pending` added to the zero-rows-without-context and cross-tenant loops; new case: RLS and FORCE set, an open row of tenant A is invisible and not updatable without context, invisible to B, B cannot insert one for A, the claim function returns no row text |
+| No test killed the worker mid-drain | `drainPending` gained `DrainHooks` (`afterRead`, `afterRow`) as test seams; `packages/domain/test/fixtures/drain-child.ts` runs the drain in its own process and pauses at a chosen point | `drain-crash-resume.test.ts` (8 projects over two tenants, CLK-09b 60 to 59 days): (1) SIGKILL inside the third row's recompute, after read and before write: exactly two rows closed, the rest open; every read is `recompute_pending` with null dates or the new date 2027-12-26, never 2027-12-27; invariants clean; the next drain closes the rest with no failure; no current deadline on an older generation or retired revision; a further drain does nothing. (2) SIGKILL after the first row (later rows claimed, untouched), then a second rule change before resuming: no read shows either superseded date; the resume converges to the final rule with nothing open |
+
+Commands (from `workspace/`, after `npm run db:reset-test` and `npm run db:migrate-test`, 4 migrations):
+
+| Command | Result |
+|---|---|
+| `npm run lint` | 0 problems |
+| `npm run typecheck` | 0 errors |
+| `npm run test:unit` | 9 files, 83 passed |
+| `npm run test:integration` | 8 files, 52 passed; also 52/52 under `--sequence.shuffle.files` seeds 1, 2, 3 |
+| `npm run golden-verify` | 15/15 |
+| `npm run orm-parity -- --test` | 0 differences |
+| `make dev-check` | ready, `{"database":true,"queue":true}` |

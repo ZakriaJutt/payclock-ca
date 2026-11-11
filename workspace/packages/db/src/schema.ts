@@ -395,7 +395,9 @@ export const recomputePending = pgTable('recompute_pending', {
   createdAt: ts('created_at').notNull().defaultNow(),
   doneAt: ts('done_at'),
 }, (t) => [
+  foreignKey({ name: 'recompute_pending_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),
   foreignKey({ name: 'recompute_pending_project_fk', columns: [t.tenantId, t.projectId], foreignColumns: [project.tenantId, project.id] }),
   uniqueIndex('recompute_pending_open_idx').on(t.projectId).where(sql`done_at is null`),
   index('recompute_pending_queue_idx').on(t.createdAt).where(sql`done_at is null`),
-]);
+  tenantPolicy('recompute_pending'),
+]).enableRLS();

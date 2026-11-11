@@ -31,41 +31,67 @@ export interface DrainReport {
   remaining: number;
 }
 
-/** Process open rows once each (oldest first). Errors are recorded on the row, never thrown. */
-export async function drainPending(app: TenantDb, correlationId: string, limit = 500): Promise<DrainReport> {
+export interface DrainHooks {
+  /** Called after each claimed row has been recorded (test seam for the crash-resume test). */
+  afterRow?: (projectId: string, index: number) => Promise<void>;
+  /** Called between a row's recompute read and its write (test seam: abort mid-batch). */
+  afterRead?: (projectId: string, index: number) => Promise<void>;
+}
+
+/**
+ * Process open rows once each (oldest first). Errors are recorded on the row, never thrown.
+ * The table is under row-level security: rows are claimed through `claim_recompute_pending`
+ * (identifiers only) and each outcome is written inside that row's own tenant transaction. A row
+ * is closed only if its generation is still the one this recompute covered, so a change landing
+ * between recompute and close leaves the row open.
+ */
+export async function drainPending(app: TenantDb, correlationId: string, limit = 500, hooks: DrainHooks = {}): Promise<DrainReport> {
   const out: DrainReport = { done: 0, failed: [], remaining: 0 };
   let rows: Array<{ id: string; tenant_id: string; project_id: string; cause: 'rule_version' | 'holiday_table'; rules_gen: number; holiday_gen: number }>;
   try {
-    rows = (await app.pool.query(
-      `update recompute_pending set attempts = attempts + 1
-       where id in (select id from recompute_pending where done_at is null order by created_at limit $1 for update skip locked)
-       returning id, tenant_id, project_id, cause, rules_gen, holiday_gen`,
-      [limit],
-    )).rows;
+    rows = (await app.pool.query('select * from claim_recompute_pending($1)', [limit])).rows;
   } catch (e) {
     return { done: 0, failed: [{ projectId: '*', error: (e as Error).message.slice(0, 200) }], remaining: -1 };
   }
+  const note = (row: (typeof rows)[number], msg: string) =>
+    app.withTenant(row.tenant_id, (tx) => tx.raw.query('update recompute_pending set last_error = $2 where id = $1', [row.id, msg]));
+  let i = 0;
   for (const row of rows) {
     try {
-      let result = await recomputeBatch(app, row.tenant_id, row.project_id, correlationId, { cause: row.cause === 'holiday_table' ? 'holiday_table' : 'rule_version' });
-      for (let i = 0; i < 2 && result.status === 'discarded' && !result.reason.startsWith('project not found'); i++) {
+      const idx = i;
+      let result = await recomputeBatch(app, row.tenant_id, row.project_id, correlationId, {
+        cause: row.cause === 'holiday_table' ? 'holiday_table' : 'rule_version',
+        afterRead: hooks.afterRead ? () => hooks.afterRead!(row.project_id, idx) : undefined,
+      });
+      for (let k = 0; k < 2 && result.status === 'discarded' && !result.reason.startsWith('project not found'); k++) {
         result = await recomputeBatch(app, row.tenant_id, row.project_id, correlationId, { cause: 'rule_version' });
       }
-      const covers = result.gens && result.gens.rulesGen >= row.rules_gen && result.gens.holidayGen >= row.holiday_gen;
+      const gens = result.gens;
+      const covers = gens && gens.rulesGen >= row.rules_gen && gens.holidayGen >= row.holiday_gen;
       if ((result.status === 'written' || result.status === 'unchanged') && covers) {
-        await app.pool.query('update recompute_pending set done_at = now(), last_error = null where id = $1', [row.id]);
-        out.done++;
+        const closed = await app.withTenant(row.tenant_id, (tx) =>
+          tx.raw.query(
+            'update recompute_pending set done_at = now(), last_error = null where id = $1 and done_at is null and rules_gen <= $2 and holiday_gen <= $3',
+            [row.id, gens.rulesGen, gens.holidayGen],
+          ));
+        if (closed.rowCount) out.done++;
+        else {
+          await note(row, 'rules changed again; will retry');
+          out.failed.push({ projectId: row.project_id, error: 'rules changed again; will retry' });
+        }
       } else {
         const why = result.status === 'discarded' ? result.reason : 'rules changed again; will retry';
-        await app.pool.query('update recompute_pending set last_error = $2 where id = $1', [row.id, why]);
+        await note(row, why);
         out.failed.push({ projectId: row.project_id, error: why });
       }
     } catch (e) {
       const msg = (e as Error).message.slice(0, 200);
-      await app.pool.query('update recompute_pending set last_error = $2 where id = $1', [row.id, msg]).catch(() => undefined);
+      await note(row, msg).catch(() => undefined);
       out.failed.push({ projectId: row.project_id, error: msg });
     }
+    await hooks.afterRow?.(row.project_id, i);
+    i++;
   }
-  out.remaining = Number((await app.pool.query('select count(*) from recompute_pending where done_at is null')).rows[0].count);
+  out.remaining = Number((await app.pool.query('select open_recompute_pending_count() as n')).rows[0].n);
   return out;
 }
