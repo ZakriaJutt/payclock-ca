@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createLogger } from '@payclock/platform';
 import { createApp } from '../src/app.ts';
-import { FakeAuthProvider } from '../src/auth.ts';
+import { FakeAuthProvider } from './fake-auth.ts';
 import { adminDb, appDb, seedTenant, type SeededTenant } from '../../../tests/helpers.ts';
 
 const db = appDb();
@@ -19,7 +19,7 @@ let B: SeededTenant;
 async function call(token: string | null, method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+    headers: { 'content-type': 'application/json', ...(token ? { cookie: `__Host-payclock_session=${token}`, 'x-csrf-token': 'fake-csrf' } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose JSON in tests

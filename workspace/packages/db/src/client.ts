@@ -65,6 +65,14 @@ export class TenantDb {
     }
   }
 
+  /**
+   * Identity writes without a tenant (B2): sessions, credentials, sign-in links and throttles are
+   * global like `app_user`. Tenant tables stay invisible here (no `app.tenant_id`).
+   */
+  withIdentity<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.withGlobalWrite(fn);
+  }
+
   /** Global writes without a tenant (rule tables, holidays). Only for the migrator connection. */
   async withGlobalWrite<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();

@@ -4,17 +4,35 @@ import { assertEnvelope, createLogger, loadConfig, MissingTenantError, normalise
 const DB = 'postgres://payclock_app@localhost:5432/payclock_test';
 
 describe('T-2.1.5 platform', () => {
-  it('config: validates at start; deployed environments need a non-loopback APP_PUBLIC_URL and real auth', () => {
-    expect(loadConfig({ APP_ENV: 'local', DATABASE_URL: DB }).API_PORT).toBe(8104);
-    expect(() => loadConfig({ APP_ENV: 'production', DATABASE_URL: DB, AUTH_MODE: 'supabase' })).toThrow(/APP_PUBLIC_URL/);
-    expect(() => loadConfig({ APP_ENV: 'production', DATABASE_URL: DB, AUTH_MODE: 'supabase', APP_PUBLIC_URL: 'http://localhost:3104' })).toThrow(/loopback/);
-    expect(() => loadConfig({ APP_ENV: 'staging', DATABASE_URL: DB, APP_PUBLIC_URL: 'https://staging.example.test' })).toThrow(/fake auth/);
+  const KEY = Buffer.alloc(32, 7).toString('base64');
+  const local = { APP_ENV: 'local', DATABASE_URL: DB, AUTH_SECRET_KEY: KEY, APP_PUBLIC_URL: 'http://localhost:3104' };
+  const prod = { APP_ENV: 'production', DATABASE_URL: DB, AUTH_SECRET_KEY: KEY, SMTP_SECURE: 'true' };
+
+  it('config: validates at start; deployed environments need a non-loopback APP_PUBLIC_URL, TLS mail and no local-only scanner', () => {
+    expect(loadConfig(local).API_PORT).toBe(8104);
+    expect(loadConfig(local).AUTH_MODE).toBe('local');
+    expect(() => loadConfig(prod)).toThrow(/APP_PUBLIC_URL/);
+    expect(() => loadConfig({ ...prod, APP_PUBLIC_URL: 'http://localhost:3104' })).toThrow(/loopback/);
+    expect(loadConfig({ ...prod, APP_PUBLIC_URL: 'https://app.payclock.example' }).PASSWORD_SCRYPT_LOG2N).toBe(17);
+    expect(() => loadConfig({ ...prod, APP_PUBLIC_URL: 'https://app.payclock.example', SMTP_SECURE: 'false' })).toThrow(/TLS/);
+    expect(() => loadConfig({ ...prod, APP_PUBLIC_URL: 'https://app.payclock.example', FILE_SCANNER: 'local-signature' })).toThrow(/V5.4.3/);
+    expect(() => loadConfig({ ...prod, APP_PUBLIC_URL: 'https://app.payclock.example', PASSWORD_SCRYPT_LOG2N: '15' })).toThrow(/scrypt/);
     expect(() => loadConfig({ APP_ENV: 'local' })).toThrow(/DATABASE_URL/);
   });
 
-  it('B1-008: fake auth is refused unless bind address, database and public URL are all local', () => {
-    const base = { APP_ENV: 'local', DATABASE_URL: DB, AUTH_MODE: 'fake' };
+  it('B2: local auth needs a 32-byte key; Supabase is not a mode (deferred); the session cookie keeps the __Host- prefix', () => {
+    expect(() => loadConfig({ ...local, AUTH_SECRET_KEY: undefined })).toThrow(/AUTH_SECRET_KEY/);
+    expect(() => loadConfig({ ...local, AUTH_SECRET_KEY: Buffer.alloc(16).toString('base64') })).toThrow(/AUTH_SECRET_KEY/);
+    expect(() => loadConfig({ ...local, AUTH_MODE: 'supabase' })).toThrow(/AUTH_MODE/);
+    expect(() => loadConfig({ ...local, SESSION_COOKIE_NAME: 'payclock_session' })).toThrow(/SESSION_COOKIE_NAME/);
+    expect(() => loadConfig({ ...local, SESSION_IDLE_MINUTES: '721' })).toThrow(/SESSION_IDLE_MINUTES/);
+  });
+
+  it('B1-008 / B2: fake auth only in the test suite, and only on a local machine', () => {
+    const base = { APP_ENV: 'test', DATABASE_URL: DB, AUTH_MODE: 'fake' };
     expect(loadConfig(base).AUTH_MODE).toBe('fake');
+    expect(() => loadConfig({ ...base, APP_ENV: 'local' })).toThrow(/test suite/);
+    expect(() => loadConfig({ ...base, APP_ENV: 'staging', APP_PUBLIC_URL: 'https://staging.example.test' })).toThrow(/fake auth/);
     expect(() => loadConfig({ ...base, APP_PUBLIC_URL: 'https://app.payclock.example' })).toThrow(/APP_PUBLIC_URL/);
     expect(() => loadConfig({ ...base, DATABASE_URL: 'postgres://u@db.payclock.example:5432/x' })).toThrow(/DATABASE_URL/);
     expect(() => loadConfig({ ...base, API_BIND_HOST: '0.0.0.0' })).toThrow(/API_BIND_HOST/);

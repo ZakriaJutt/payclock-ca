@@ -85,10 +85,10 @@ Impact is written for this product: a subcontractor relying on dates for money a
 | R-10 | Two branches add migrations; production applies them in a different order from staging and rule tables diverge | Linear order check | CI failure | IT-10: conflicting branches fail CI. B1 2026-11-11: IT-10 order part passed against fixtures (`packages/db/test/migrations.test.ts`); no CI yet | T-2.2.3 |
 | R-11 | Creating an index on `deadline` blocks corrections during business hours | Concurrent index creation, lock timeout | Lock wait metric during deploy | IT-10: writes continue during index build | T-2.2.3 |
 | R-12 | A failed reminder cannot be traced to the correction that caused it; or logs expose invoice amounts and general-contractor names | Correlation id through request, job, mail; redaction rules | Log sampling in CI | IT-12: id present end to end; no sensitive values. B1 2026-11-11: IT-12 logging part passed (`apps/web/test/api.test.ts`, `packages/platform/test/platform.test.ts`); job and mail parts not built | T-2.1.5 |
-| R-13 | An evidence file overwrites another firm's or another invoice's file | Server-generated keys with tenant, purpose, entity, uuid | Storage audit for keys outside pattern | IT-11: key pattern enforced | T-2.2.4 |
+| R-13 | An evidence file overwrites another firm's or another invoice's file | Server-generated keys with tenant, purpose, entity, uuid | Storage audit for keys outside pattern | IT-11: key pattern enforced. B2: key pattern enforced in code and by constraint `source_document_key_check`, cross-tenant upload and download refused (`apps/web/test/documents-minio.test.ts`, passed) | T-2.2.4 |
 | R-14 | Uploaded aging lists (customer and amount data) remain after 30 days or after deletion | `expires_at` and nightly sweep with alert | Count of expired objects still present | IT-11, IT-13: expired file gone; deletion complete | T-6.1.3 |
 | R-15 | Recreating a service wipes uploaded evidence or the database | Managed database and storage; stateless containers; named volume locally | Restore drill; storage object count | IT-14: data intact after recreation | T-2.1.4 |
-| R-16 | A deadline email or evidence link points to `localhost` or an internal host and the owner cannot open it on the due day | Links built only from `APP_PUBLIC_URL`; start fails on loopback in production | Link checker | IT-11, E2E-06: host equals public URL | T-2.2.4 |
+| R-16 | A deadline email or evidence link points to `localhost` or an internal host and the owner cannot open it on the due day | Links built only from `APP_PUBLIC_URL`; start fails on loopback in production | Link checker | IT-11, E2E-06: host equals public URL. B2: evidence, invitation and reset links use `APP_PUBLIC_URL` (`documents-minio.test.ts`, `auth-local.test.ts`, passed); E2E-06 `Not run` | T-2.2.4 |
 | R-17 | A developer runs web without the worker; reminders never fire in testing and the defect ships | One start command with health checks | "ready" line lists every service | IT-14. B1 2026-11-11: `make dev-check` printed "ready" with database and queue checks; fails naming the dependency when Postgres is unreachable (section 9) | T-2.1.2 |
 | R-18 | After Back or refresh the user re-submits a correction or loses the reason typed; a diff link in an email opens a blank page | URL state, idempotency, form persistence, permanent diff URLs | Client error rate on S-08, S-09 | E2E-04 | T-4.3.7 |
 | R-19 | Import silently skips 5 invoices, which then have no deadlines; or a retry doubles invoices and reminders | Per-row results, resume from last committed row, unique invoice key | Batch counts not summing to total | IT-09: 31/4/5, no duplicates | T-4.1.2 |
@@ -347,3 +347,78 @@ Commands (from `workspace/`, after `npm run db:reset-test` and `npm run db:migra
 | `npm run golden-verify` | 15/15 |
 | `npm run orm-parity -- --test` | 0 differences |
 | `make dev-check` | ready, `{"database":true,"queue":true}` |
+
+## 10. Build milestone B2 (2026-11-11)
+
+Owner request of 2026-11-11 (`_coordination/B2-GUIDE.md`): build what needs no external account. Branch `feat/b2-local-auth`, created from `feat/b1-foundation` at `2abd310` (the round-3 hardening, section 9.8). Not pushed.
+
+### 10.1 What was built
+
+| Task | Built | Not built |
+|---|---|---|
+| T-2.2.2 | Local sign-in per TRD 8.1 and AD-08: email and password plus TOTP (optional for tenant users; an operator without TOTP gets an enrol-only session). Supabase Auth, named in the TRD, is **not used** (no account; owner instruction) and is recorded as a deferred option behind the same `AuthProvider` interface. Sessions in `auth_session`; `__Host-` cookie with Secure, HttpOnly, SameSite=Strict, Path=/; 12-hour idle and 7-day absolute timeout; new token on sign-in; sign-out, sign-out everywhere, revocation on membership removal and password reset; anti-forgery token, JSON-only bodies and an Origin check; delays per account and per address (configuration in TRD 8.1); roles from schema.md section 5 (owner manages the team; member sees own membership; viewer read only); invitation flow (72 hours, single use) including a first-owner invitation for onboarding; password reset link (60 minutes, single use; TOTP still required after it). The B1 fake provider is removed from the server; it remains only in `apps/web/test/fake-auth.ts`, and configuration allows `AUTH_MODE=fake` only with `APP_ENV=test` | `read` and `assisted_load` support grants (IT-02 operator cases); password change while signed in; re-authentication before TOTP enrolment; TOTP removal and recovery codes; breached-password set; per-user API rate limit; sign-in UI (no frontend) |
+| T-2.2.4 | Storage interface in `packages/platform` over the S3 API (MinIO locally, bucket `payclock-dev`); keys `t/{tenant}/{purpose}/{entity}/{uuid}.{ext}` built by the server and checked again before every storage call and by a database constraint; `source_document` with forced RLS; upload `POST /documents` (PDF, PNG, JPEG, CSV; 10 MB; declared type and content signature must agree); 5-minute HMAC-signed link on `APP_PUBLIC_URL` that also needs a session of the same tenant; download with a server-set file name; objects never public | Malware scanner (V5.4.3): only a local signature re-check, refused outside local and test; expiry sweep of temporary import files |
+| Mail | `packages/platform` mailer over SMTP (nodemailer 10.2.1): Mailpit at 127.0.0.1:1025 locally; production selects a provider relay by settings, and configuration requires TLS outside local and test. Auth emails carry a link and fixed wording only (no amounts, invoice numbers, contractor or owner names) | Reminder and digest emails (T-4.3.2) |
+
+New migration `20261111T500000_local_auth_and_documents.sql` (tables `user_credential`, `auth_session`, `auth_token`, `auth_throttle`, `source_document`; functions `user_active_memberships`, `record_auth_event`); ORM model matches (parity 0). Dependencies added: `nodemailer` 10.2.1, `@aws-sdk/client-s3` 3.1153.0, `@types/nodemailer` 8.0.2 (dev); `npm audit --omit=dev`: 0 vulnerabilities. Local values (auth key, MinIO local credentials) are only in the git-ignored `.env.local` and `.env.test` written by `npm run db:bootstrap`; `workspace/.env.example` lists the names.
+
+Departure from the B2 task message, recorded: the lead's message said "email link plus TOTP"; TRD 8.1 and AD-08 specify password plus TOTP and explicitly no sign-in by email link (ASVS V6.3.6). The TRD wins (AGENTS.md section 2), so email links are used only for invitations and password reset.
+
+### 10.2 Commands and results (clean test database)
+
+From `workspace/`, with Mailpit and MinIO running, after `npm run db:reset-test` and `npm run db:migrate-test` (5 migrations):
+
+| Command | Result |
+|---|---|
+| `npm run lint` | 0 problems |
+| `npm run typecheck` | 0 errors |
+| `npm run test:unit` | 11 files, 97 passed (adds `packages/domain/test/unit/auth-crypto.test.ts`: RFC 6238 vectors, replay window, scrypt, password rules, AES-GCM, storage keys; `apps/web/test/unit/cookies.test.ts`; updated config tests) |
+| `npm run test:integration` | 10 files, 78 passed (adds `apps/web/test/auth-local.test.ts` 18, `apps/web/test/documents-minio.test.ts` 8); also 78/78 under `--sequence.shuffle.files` seeds 1 and 2 |
+| `npm run golden-verify` | 15/15 |
+| `npm run orm-parity -- --test` | 0 differences |
+| `make dev-check` | ready, `{"database":true,"queue":true,"storage":true}`; the seed sent first-owner invitations for the two synthetic tenants to Mailpit |
+
+Integration cases against Mailpit and MinIO (all passed): first-owner invitation read from Mailpit, weak password refused, password set, link reused refused (410); sign-in cookie attributes; session hash only in the database; CSRF missing or wrong, foreign Origin, form content type refused; TOTP enrolment, code required, code reused refused; logout invalidates on the server; new token on sign-in revokes the presented one; owner invites a member through the API, the member accepts from Mailpit and signs in; member and viewer permission refusals; expired invitation refused; member removal revokes the live session; last owner cannot be removed; tenant A session gets 404 on tenant B records, cannot sign in to B, and a session row pointed at B is refused (no membership); wrong passwords lead to 429 with `Retry-After` even for the right password, then work again after the delay; unknown account gets the same answer; idle and absolute expiry refused; password reset from Mailpit, single use, revokes sessions, TOTP still required, unknown email gets the same 202 and no mail, expired reset refused, reset requests throttled; operator without TOTP restricted to enrolment; upload and download for tenant A on MinIO; anonymous MinIO GET 403; link host equals `APP_PUBLIC_URL`; tenant B: link 404, A's signed link 403, upload on A's invoice 404; tampered and expired link 403; renamed executable as PDF 415, other type 415, over 10 MB 413, viewer upload 403; file not clean cannot be linked; out-of-prefix key refused by constraint; no rows without tenant context; every test object deleted from MinIO and checked gone; only the Mailpit messages the run read are deleted.
+
+### 10.3 Results per test ID (changes only)
+
+| Test | Result |
+|---|---|
+| IT-01 | Extended: session cookie of tenant A refused for tenant B through API and file link (`auth-local.test.ts`, `documents-minio.test.ts`). Export `Not run` (not built) |
+| IT-02 | Viewer write 403 and member team-management 403 passed; operator grant cases `Not run` (support grants not built) |
+| IT-11 | Renamed executable 415, link host equals `APP_PUBLIC_URL`, expired link refused: passed. Expired import file swept: `Not run` (sweep not built) |
+| All others | As in section 9.3 |
+
+### 10.4 OWASP ASVS 5.0.0 requirements addressed (implemented controls, not a conformance claim)
+
+IDs follow ASVS 5.0.0 as cited in TRD 8.1 and 8.7; where the numbering below goes beyond the TRD's own citations it is the author's reading of ASVS 5.0.0 and should be checked by the reviewer.
+
+| Implemented | Control |
+|---|---|
+| V6.2.1, V6.2.9 | 12 to 128 characters accepted |
+| V6.2.5, V6.2.10 | No composition rules, no forced rotation |
+| V6.2.4 (partial), V6.2.11 | Short local common-password list and patterns (not a top-3000 list); email local part and product name refused |
+| V6.3.1, V6.1.1 | Delays per account and per address, no hard lock; configuration documented in TRD 8.1 |
+| V6.3.2 | No default accounts; the seed invites, it sets no password |
+| V6.3.6 | No sign-in by email link |
+| V6.4.1 | Invitation and reset links 256-bit random, expire (72 h, 60 min), single use |
+| V6.4.3 | Reset keeps TOTP required |
+| V6.5 (TOTP) | RFC 6238, one step either side, each step used once, secret 160-bit random and encrypted at rest |
+| V7.2.1, V7.2.3, V7.2.4 | Server-side session check per request; 256-bit random reference token stored hashed; new token at sign-in |
+| V7.3.1, V7.3.2 | 12-hour inactivity, 7-day absolute lifetime |
+| V7.4.1, V7.4.2, V7.4.3 | Server-side sign-out; sessions end when a membership is removed; all sessions end at password reset; sign out everywhere |
+| V3.3.1 to V3.3.4 | `__Host-` cookie, Secure, HttpOnly, SameSite=Strict |
+| V3.5.1 | Anti-forgery token on every state-changing session request, JSON-only bodies, Origin check |
+| V8.2.1, V8.2.2 | Role checks (schema.md section 5) and tenant row-level security on every request |
+| V11.4.2 | scrypt (N = 2^17, r = 8, p = 1 outside local and test) |
+| V5.2.1, V5.2.2, V5.3.2, V5.4.1 | 10 MB limit; type and content signature agree; server-generated object keys; server-set download file name |
+| V16.3.1 | Sign-in success and failure, sign-out, reset, TOTP enrolment and team changes written to `audit_event` |
+| V13.3.1 | No secret in the repository; names only in `.env.example` |
+
+Not addressed: V6.2.2 and V6.2.3 (password change while signed in), V6.2.12 (breached-password set; needs a corpus or an outside service), V6.3.3 (MFA for every user at level 2: TOTP is optional for tenant users by design), V6.3.8 in full (a TOTP user learns the password was right from `totp_required`), V7.5.x (re-authentication before changing the authenticator), recovery codes and TOTP removal, V2.4.1 beyond sign-in, reset and invitation (no general per-user API rate limit), V5.4.3 (no malware scanner), V12.x (TLS: local runs on http; deployment out of scope), V6.6 and V10 (no out-of-band or OAuth/OIDC; external identity providers deferred).
+
+### 10.5 Residuals
+
+- Sign-in and invitation emails are sent inline after the commit, not through the queue; a failed send is logged (`request.after_commit_failed`) and the owner can invite again.
+- The session row's `csrf_sha256` is recorded, but the token is derived from the session id with HMAC (`AUTH_SECRET_KEY`), so rotating that key ends every session and link.
+- Client address for throttling is the socket address; behind a proxy a trusted forwarded-address setting is needed (not built).

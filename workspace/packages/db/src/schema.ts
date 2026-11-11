@@ -401,3 +401,98 @@ export const recomputePending = pgTable('recompute_pending', {
   index('recompute_pending_queue_idx').on(t.createdAt).where(sql`done_at is null`),
   tenantPolicy('recompute_pending'),
 ]).enableRLS();
+
+// ---------- B2: local sign-in and evidence files (migration 20261111T500000) ----------
+export const authTokenKind = pgEnum('auth_token_kind', ['invitation', 'password_reset']);
+export const documentPurpose = pgEnum('document_purpose', ['evidence', 'import', 'action_pdf', 'sent_copy', 'export']);
+export const scanStatus = pgEnum('scan_status', ['pending', 'clean', 'rejected']);
+
+export const userCredential = pgTable('user_credential', {
+  userId: uuid('user_id').primaryKey(),
+  passwordHash: text('password_hash'),
+  passwordChangedAt: ts('password_changed_at'),
+  totpSecretEnc: bytea('totp_secret_enc'),
+  totpPendingEnc: bytea('totp_pending_enc'),
+  totpEnabledAt: ts('totp_enabled_at'),
+  totpLastStep: bigint('totp_last_step', { mode: 'number' }),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [
+  foreignKey({ name: 'user_credential_user_id_fkey', columns: [t.userId], foreignColumns: [appUser.id] }),
+  check('user_credential_totp_check', sql`(totp_enabled_at is null) = (totp_secret_enc is null)`),
+]);
+
+export const authSession = pgTable('auth_session', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tokenSha256: bytea('token_sha256').notNull(),
+  csrfSha256: bytea('csrf_sha256').notNull(),
+  userId: uuid('user_id').notNull(),
+  tenantId: uuid('tenant_id'),
+  totpVerified: boolean('totp_verified').notNull().default(false),
+  restricted: boolean('restricted').notNull().default(false),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
+  idleExpiresAt: ts('idle_expires_at').notNull(),
+  absoluteExpiresAt: ts('absolute_expires_at').notNull(),
+  revokedAt: ts('revoked_at'),
+  revokeReason: text('revoke_reason'),
+}, (t) => [
+  unique('auth_session_token_key').on(t.tokenSha256),
+  foreignKey({ name: 'auth_session_user_id_fkey', columns: [t.userId], foreignColumns: [appUser.id] }),
+  foreignKey({ name: 'auth_session_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),
+  index('auth_session_user_idx').on(t.userId).where(sql`revoked_at is null`),
+]);
+
+export const authToken = pgTable('auth_token', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  kind: authTokenKind('kind').notNull(),
+  tokenSha256: bytea('token_sha256').notNull(),
+  userId: uuid('user_id').notNull(),
+  tenantId: uuid('tenant_id'),
+  membershipId: uuid('membership_id'),
+  createdBy: uuid('created_by'),
+  expiresAt: ts('expires_at').notNull(),
+  usedAt: ts('used_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('auth_token_token_key').on(t.tokenSha256),
+  foreignKey({ name: 'auth_token_user_id_fkey', columns: [t.userId], foreignColumns: [appUser.id] }),
+  foreignKey({ name: 'auth_token_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),
+  foreignKey({ name: 'auth_token_membership_id_fkey', columns: [t.membershipId], foreignColumns: [membership.id] }),
+  foreignKey({ name: 'auth_token_created_by_fkey', columns: [t.createdBy], foreignColumns: [appUser.id] }),
+  check('auth_token_invitation_check', sql`kind <> 'invitation' or (tenant_id is not null and membership_id is not null)`),
+  index('auth_token_user_idx').on(t.userId, t.kind).where(sql`used_at is null`),
+]);
+
+export const authThrottle = pgTable('auth_throttle', {
+  key: text('key').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  nextAllowedAt: ts('next_allowed_at'),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const sourceDocument = pgTable('source_document', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  purpose: documentPurpose('purpose').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id').notNull(),
+  storageKey: text('storage_key').notNull(),
+  sha256: bytea('sha256').notNull(),
+  mime: text('mime').notNull(),
+  bytes: integer('bytes').notNull(),
+  scanStatus: scanStatus('scan_status').notNull().default('pending'),
+  expiresAt: ts('expires_at'),
+  uploadedBy: uuid('uploaded_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [
+  foreignKey({ name: 'source_document_tenant_id_fkey', columns: [t.tenantId], foreignColumns: [tenant.id] }),
+  foreignKey({ name: 'source_document_uploaded_by_fkey', columns: [t.uploadedBy], foreignColumns: [appUser.id] }),
+  unique('source_document_storage_key_key').on(t.storageKey),
+  unique('source_document_tenant_id_key').on(t.tenantId, t.id),
+  check('source_document_entity_type_check', sql`entity_type in ('project', 'subcontract', 'invoice', 'event')`),
+  check('source_document_bytes_check', sql`bytes > 0 and bytes <= 10485760`),
+  check('source_document_key_check', sql`storage_key like 't/' || tenant_id::text || '/' || purpose::text || '/' || entity_id::text || '/%'`),
+  index('source_document_entity_idx').on(t.tenantId, t.entityType, t.entityId),
+  index('source_document_expires_idx').on(t.expiresAt).where(sql`expires_at is not null`),
+  tenantPolicy('source_document'),
+]).enableRLS();

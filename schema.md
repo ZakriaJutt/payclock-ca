@@ -44,7 +44,7 @@ erDiagram
 - Keys: `id uuid` primary key, default `gen_random_uuid()`, unless stated. `created_at timestamptz not null default now()` on every table.
 - Tenant tables carry `tenant_id uuid not null references tenant(id)`; composite foreign keys include `tenant_id` so a child cannot point at another tenant's parent.
 - Legal dates are `date` (civil date, America/Toronto). Money is `bigint` cents. Enumerations are Postgres enums.
-- Sensitivity: **C** confidential business data (amounts, counterparties, disputes), **P** personal information (names, emails), **I** internal.
+- Sensitivity: **C** confidential business data (amounts, counterparties, disputes), **P** personal information (names, emails), **I** internal, **S** authentication secrets (hashed or encrypted; never logged or exported).
 
 ## 3. Dictionary
 
@@ -55,6 +55,10 @@ erDiagram
 | `tenant` | `legal_name text`; `trade text null`; `digest_weekday smallint default 1 check 0..6`; `disclaimer_version text null`; `disclaimer_accepted_at timestamptz null`; `baseline_notices_30d int null`; `plan` enum(pilot, launch, starter, pro, business) default pilot (`launch` is the single CAD 99 plan of MH-13; the three tiers are unused until introduced); `billing_ref text null unique`; `subscription_status` enum(none, active, past_due, read_only, cancelled) default none; `current_period_end date null`; `pilot_started_on date null`; `pilot_ends_on date null`; `pilot_fee_cents bigint null`; `converted_on date null`; `status` enum(active, locked, deleting) default active; `deleted_at timestamptz null` | C |
 | `app_user` | `id uuid` = auth subject; `email citext unique`; `display_name text`; `is_operator bool default false` | P |
 | `membership` | `tenant_id`; `user_id` fk; `role` enum(owner, member, viewer); `status` enum(invited, active, removed) default invited; unique(`tenant_id`,`user_id`); check: at least one active owner per tenant (trigger) | P |
+| `user_credential` (B2) | `user_id` pk fk app_user; `password_hash text null` (scrypt, cost in the value); `password_changed_at`; `totp_secret_enc bytea null` (AES-256-GCM, key `AUTH_SECRET_KEY`); `totp_pending_enc bytea null` (enrolment not yet confirmed); `totp_enabled_at`; `totp_last_step bigint null` (each TOTP step usable once); check: secret present exactly when enabled. Global, no tenant | S |
+| `auth_session` (B2) | `token_sha256 bytea unique` (the cookie value is never stored); `csrf_sha256 bytea`; `user_id` fk; `tenant_id uuid null` fk (null only for an operator); `totp_verified bool`; `restricted bool` (operator without TOTP: enrolment only); `last_seen_at`; `idle_expires_at` (12 h after last use); `absolute_expires_at` (7 days); `revoked_at null`; `revoke_reason text null`. Global; a session counts only with a live membership of its tenant | S |
+| `auth_token` (B2) | `kind` enum(invitation, password_reset); `token_sha256 bytea unique`; `user_id` fk; `tenant_id null`, `membership_id null` (required for invitations); `created_by null`; `expires_at` (72 h invitation, 60 min reset); `used_at null` (single use, compare-and-set) | S |
+| `auth_throttle` (B2) | `key text` pk (`account:`, `address:`, `reset:`, `invite:` + value); `failures int`; `next_allowed_at null`; `updated_at` | I |
 | `support_grant` | `tenant_id`; `operator_id` fk; `granted_by` fk; `scope` enum(read, assisted_load); `expires_at timestamptz` check <= created_at + 72 h for read, + 35 days for assisted_load; `revoked_at timestamptz null` | I |
 
 ### Work records
@@ -65,7 +69,7 @@ erDiagram
 | `subcontract` | `tenant_id`; `project_id` fk; `reference text null`; `has_sub_subs bool null`; `holdback_rate numeric(5,4) default 0.1000`; `fact_version int default 0` | C |
 | `invoice` | `tenant_id`; `subcontract_id` fk; `number text`; `given_to_contractor_on date null`; `amount_cents bigint check >= 0`; `holdback_cents bigint default 0 check >= 0`; `status` enum(open, paid, written_off) default open; `import_row_id uuid null`; `fact_version int default 0`; unique(`tenant_id`,`subcontract_id`,`number`) | C |
 | `holdback_entry` | `tenant_id`; `subcontract_id` fk; `invoice_id uuid null`; `kind` enum(retained, released); `amount_cents bigint check > 0`; `on_date date`; `event_id uuid null` | C |
-| `source_document` | `tenant_id`; `purpose` enum(evidence, import, action_pdf, sent_copy, export); `entity_type text`; `entity_id uuid`; `storage_key text unique`; `sha256 bytea`; `mime text`; `bytes int check <= 10485760`; `expires_at timestamptz null`; `uploaded_by` fk | C |
+| `source_document` (built in B2) | `tenant_id`; `purpose` enum(evidence, import, action_pdf, sent_copy, export); `entity_type text` check in (project, subcontract, invoice, event); `entity_id uuid`; `storage_key text unique`, check: starts `t/{tenant_id}/{purpose}/{entity_id}/`; `sha256 bytea`; `mime text`; `bytes int check 1..10485760`; `scan_status` enum(pending, clean, rejected) default pending (downloads only when clean); `expires_at timestamptz null`; `uploaded_by` fk; unique(`tenant_id`,`id`). RLS forced, policy `source_document_isolation`. No user file name is stored | C |
 
 ### Facts
 
@@ -110,7 +114,7 @@ erDiagram
 
 Queue tables belong to pg-boss in schema `pgboss` and are not modelled in the ORM.
 
-Not in B1 (still proposed): `support_grant`, `source_document`, `holdback_entry`, `action`, `import_batch`, `import_row`, `digest_send`, `billing_event`, `data_request`; `tenant` billing and pilot columns other than `plan` and `subscription_status`.
+Not built yet (still proposed): `support_grant`, `holdback_entry`, `action`, `import_batch`, `import_row`, `digest_send`, `billing_event`, `data_request`; `tenant` billing and pilot columns other than `plan` and `subscription_status`.
 
 ## 4. Indexes and their queries
 
@@ -147,6 +151,7 @@ Not in B1 (still proposed): `support_grant`, `source_document`, `holdback_entry`
 | `audit_event` | read | none | read | read (rule actions) | insert | insert |
 
 - Database roles: `app_tenant` (locally `payclock_app`, NOSUPERUSER NOBYPASSRLS, created by `scripts/db-bootstrap.ts`; row-level security enabled and forced on every tenant table; policy `tenant_id = current_setting('app.tenant_id')::uuid`), `app_rules_admin` (rule tables only), `app_migrator` (schema changes only, not used at runtime). No runtime role bypasses row-level security.
+- Identity tables (B2): `user_credential`, `auth_session`, `auth_token`, `auth_throttle` are global like `app_user`, readable and writable by the runtime role (no tenant business data; tokens hashed; TOTP secret encrypted). Cross-tenant reads needed before a tenant is known go through SECURITY DEFINER functions returning identifiers only: `user_active_memberships(user)` (tenant id and role) and `record_auth_event(...)` (sign-in audit rows that may have no tenant).
 - Uniqueness is scoped per tenant except `app_user.email`, `rule_version` (`code`, `revision`), `source_document.storage_key`.
 - Cross-tenant denial: a query without the tenant setting returns no rows and writes fail; APIs answer 404; storage keys start `t/{tenant_id}/` and links are issued only after a row-level read succeeds.
 
@@ -181,4 +186,5 @@ Each deadline points to its `rule_clock` (hence rule version and sign-off), its 
 - ORM parity: the ORM schema is generated from, and diffed against, a database built from the migrations; any index or constraint present in one and not the other fails CI (R-08).
 - Backfills: separate, resumable scripts that work in keyed batches with a checkpoint table; safe to re-run (R-09).
 - Locks: indexes on populated tables are created concurrently outside a transaction; `lock_timeout` 5 s and retry; constraints added `not valid` then validated (R-11).
+- Applied so far: `20261111T100000_core`, `20261111T200000_rule_revisions_holiday_coverage`, `20261111T300000_rules_generation_recompute_pending`, `20261111T400000_recompute_pending_rls` (round-3 hardening), `20261111T500000_local_auth_and_documents` (B2).
 - Partial execution: each migration is transactional where Postgres allows; a failed concurrent index is dropped and recreated by the next run; expand/contract keeps the previous release working.

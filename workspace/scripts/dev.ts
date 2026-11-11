@@ -5,7 +5,6 @@
  * healthy. Any unhealthy dependency or early exit stops with a non-zero code naming it.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
 import { TenantDb } from '@payclock/db';
 import { loadConfig } from '@payclock/platform';
 import { loadEnvFile } from './env.ts';
@@ -27,8 +26,7 @@ for (const script of ['packages/db/src/migrate-cli.ts', 'scripts/seed-synthetic.
   const r = spawnSync(tsx, [script], { cwd: root, stdio: 'inherit' });
   if (r.status !== 0) fail(script);
 }
-const sessionsFile = `${root}.local-data/dev-sessions.json`;
-const env = { ...process.env, FAKE_AUTH_SESSIONS: existsSync(sessionsFile) ? JSON.stringify(JSON.parse(readFileSync(sessionsFile, 'utf8'))) : '' };
+const env = { ...process.env };
 
 const children: Array<[string, ChildProcess]> = [];
 let workerReady = false;

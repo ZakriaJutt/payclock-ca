@@ -8,3 +8,7 @@ export { changeProclaimedHoliday, HOLIDAY_YEARS, recomputeAll, syncDraftRules, t
 export { drainPending, enqueueStale, type DrainHooks, type DrainReport } from './pending.ts';
 export { invariantCheck } from './invariants.ts';
 export { resolveMembership } from './membership.ts';
+export { AuthError, LocalAuthService, type AuthSettings, type SessionContext, type SignInResult } from './auth/service.ts';
+export { base32Decode, totpCode, totpStep } from './auth/crypto.ts';
+export { checkPassword } from './auth/password-policy.ts';
+export { documentLink, downloadDocument, localSignatureScanner, MAX_FILE_BYTES, noScanner, uploadDocument, type DocumentDeps, type FileScanner } from './documents.ts';

@@ -28,7 +28,7 @@ flowchart LR
 
 | External system | Direction | Data | Failure behaviour |
 |---|---|---|---|
-| Supabase Auth | in | Credentials, sessions | Sign-in unavailable; no data path affected |
+| Supabase Auth (deferred option; B2 runs local sign-in in the app and database instead) | in | Credentials, sessions | Sign-in unavailable; no data path affected |
 | Postmark (outside Canada) | out | Reminder and digest emails to workspace users: clock name, date, certainty, link. No amounts, no contractor or owner names, no invoice numbers | Retry, then reconcile (section 8.4) |
 | Stripe (outside Canada) | both | Billing contact, plan, subscription status; card data stays with Stripe; no invoice or project data | Webhook retry and state fetch (`AD-13`); 7 days of grace |
 | e-Laws | none at runtime | Rule text is copied into rule versions by the operator | n/a |
@@ -86,6 +86,7 @@ All mutating calls require `Idempotency-Key`; all responses carry `X-Correlation
 | `POST /projects`, `POST /subcontracts`, `POST /invoices` | owner, member; operator under `assisted_load` | Create records | 201; 409 duplicate (same subcontract, invoice number) |
 | `GET`/`POST /subcontracts/{id}/holdback-entries` | read: all tenant roles; write: owner, member | Holdback ledger | 201 |
 | `GET`/`POST /memberships`, `POST /invitations`, `DELETE /memberships/{id}` | owner | Team; invitation links expire after 72 hours and work once | 409 on last owner |
+| `POST /auth/sign-in`, `/auth/sign-out`, `/auth/sessions/revoke-all`, `GET /auth/session`; `POST /auth/invitations/accept`, `/auth/password-reset/request`, `/auth/password-reset/complete`; `POST /auth/totp/enroll`, `/auth/totp/confirm` (B2) | sign-in, accept and reset: none; others: any session | Session cookie, anti-forgery token, links, authenticator | 401 `invalid_credentials` or `totp_required`; 409 `tenant_choice_required`; 410 `link_invalid`; 429 with `Retry-After`; 403 `csrf_refused`, `origin_refused`, `totp_enrolment_required` |
 | `POST /support-grants`, `DELETE /support-grants/{id}` | owner | Grant `read` or `assisted_load` to PayClock staff; revoke | 201 |
 | `POST /flags/{id}/resolve` | owner, member | Record how a lawyer flag was dealt with (note required) | 200 |
 | `GET /audit-events?cursor=` | owner, viewer | Audit list | 200 |
@@ -181,8 +182,8 @@ flowchart LR
 |---|---|---|---|
 | Start | One proposed command (`make dev`, Docker Compose): Postgres, storage emulator, mail catcher, web, worker; health checks gate "ready" | Deployed from `main` | Tagged release, manual approval |
 | Data | Synthetic seed only | Synthetic only | Customer data |
-| Email | Mail catcher | Postmark sandbox | Postmark live |
-| Auth | Local auth emulator | Separate project | Separate project, TOTP required for `operator` |
+| Email | Mailpit (SMTP 127.0.0.1:1025, B2) | Postmark sandbox through SMTP settings | Postmark live through SMTP settings (TLS required by configuration) |
+| Auth | Local sign-in (B2, same code as production would run unless Supabase is chosen later) | Separate key and database | Separate key and database, TOTP required for `operator` |
 | Volumes | Named volume for Postgres | Managed | Managed; containers are stateless |
 | Public URL | `http://localhost:3000` | `APP_PUBLIC_URL` required | `APP_PUBLIC_URL` required; start fails if it is unset or a loopback host |
 
@@ -200,6 +201,8 @@ Operating cost `[A]`, monthly: compute about CAD 40; Supabase Pro USD 25 = CAD 3
 ## 8. Crosscutting concepts
 
 ### 8.1 Identity and sessions
+
+**Built in B2 (2026-11-11), local provider.** Supabase Auth is not used: no account exists and the owner's B2 instruction was to build without external accounts. `LocalAuthService` (`workspace/packages/domain/src/auth/`) implements the design below behind the `AuthProvider` interface of `apps/web` (session check and anti-forgery check); Supabase Auth stays a **deferred option** that would implement the same interface. Built: email and password (scrypt, cost 2^17 outside local and test), optional TOTP for tenant users and a restricted, enrol-only session for an operator without TOTP; sessions in table `auth_session` (256-bit token in a `__Host-` cookie with Secure, HttpOnly, SameSite=Strict, Path=/; only its SHA-256 stored), 12-hour inactivity and 7-day absolute timeout, a new token on every sign-in with the presented one revoked, server-side sign-out, "sign out everywhere", revocation on membership removal and on password reset; anti-forgery token per session (`X-CSRF-Token`), JSON-only bodies and an `Origin` check against `APP_PUBLIC_URL`; increasing delays per account and per address (no hard lock; configuration: per account the first 4 failures are free, then a delay of 2^(n-4) seconds capped at 15 minutes; per client address 20 free; reset requests 3 per account, then doubling up to 1 hour; invitations 20 per workspace, then doubling up to 1 hour; a counter restarts after 1 hour without attempts; a successful sign-in clears the account counter); invitation links (72 hours) and reset links (60 minutes), single use, sent by SMTP (Mailpit locally) after the transaction commits; a first-owner invitation for onboarding. Not built: password change while signed in, re-authentication before TOTP enrolment, TOTP removal and recovery codes, breached-password set (V6.2.12), per-user API rate limits (V2.4.1 beyond sign-in, reset and invitation). Details and ASVS mapping: verification report section 10.
 
 Supabase Auth with email and password, minimum 12 characters (above the 8 required by ASVS 5.0.0 V6.2.1), optional TOTP for tenant users, required for `operator`. No magic links: ASVS V6.3.6 (level 3) says email is not to be used as an authentication mechanism. Password reset still travels by email; that recovery path is an accepted gap, not a compliance claim. Reset never removes or bypasses TOTP: a user with TOTP enrolled must present it after reset (V6.4.3). New passwords are checked against a list of common passwords (V6.2.4) and a breached-password set (V6.2.12). Failed sign-ins meet increasing delays per account and per address rather than a hard lock, so that nobody can lock an owner out on a deadline day (V6.1.1, V6.3.1); the configuration is to be documented. Invitation and reset links expire and work once (V6.4.1). API calls are rate-limited per user and tenant (V2.4.1). Server-side session checks (V7.2.1), new token on sign-in (V7.2.4), server-side invalidation on sign-out (V7.4.1), 12-hour inactivity timeout (V7.3.1).
 
@@ -240,6 +243,8 @@ Append-only `audit_event`: who, when, tenant, action, entity, before and after h
 Shared logger in `packages/platform`; structured; correlation id carried from request to job payload to outbound mail metadata. Never logged: amounts with counterparty names, document contents, email bodies, tokens (V16.2.5). Identifiers only.
 
 ### 8.7 Files
+
+Built in B2: S3 API through `packages/platform` storage (MinIO locally at 127.0.0.1:9000, bucket `payclock-dev`), `source_document` rows under row-level security, raw-body upload `POST /api/v1/documents?purpose&entity_type&entity_id`, link `GET /documents/{id}/link` (5 minutes, on `APP_PUBLIC_URL`, HMAC-signed for tenant and document) and `GET /documents/{id}/content`, which also requires a session of that tenant; objects are never public. The scanner is not chosen: locally `FILE_SCANNER=local-signature` re-checks the content signature only (configuration refuses it outside local and test); with no scanner every file stays `pending` and cannot be downloaded. Temporary-file expiry sweep: not built.
 
 Types: PDF, PNG, JPEG, CSV; 10 MB limit (V5.2.1); uploaded files are scanned before any user can download them, and held as "pending scan" until then (V5.4.3; scanner not chosen, status not met until it is); extension and content sniffing must agree (V5.2.2); server-generated keys `t/{tenant_id}/{purpose}/{entity_id}/{uuid}.{ext}` (V5.3.2); downloads by 5-minute signed link built from `APP_PUBLIC_URL`, with a server-set filename (V5.4.1). Temporary import files carry an expiry and are swept.
 
@@ -288,7 +293,7 @@ Planned controls are not evidence of compliance; verification status is in [veri
 | AD-05 | pg-boss in Postgres, no Redis | Lower throughput ceiling; one fewer service | Revisit above 50 jobs/s |
 | AD-06 | No AI in MVP | Manual entry cost; removes a review burden | Yes |
 | AD-07 | Templates are fixed lawyer-reviewed text with merge fields | Less flexible; reviewable once (L-03) | No |
-| AD-08 | Password plus TOTP; no magic link (departs from brief) | More friction than a link | No |
+| AD-08 | Password plus TOTP; no magic link (departs from brief). B2: implemented locally (`LocalAuthService`); Supabase Auth deferred | More friction than a link | No |
 | AD-09 | App and worker on Fly.io in its Toronto region; database, storage and auth on Supabase ca-central. Vercel dropped because the worker needs a long-running process. The founder's VPS is used only if it is in Canada (location not stated) | Two vendors | Host choice until `T-2.1.4` |
 | AD-10 | Email only; SMS deferred (departs from brief) | Reminders may be missed | Yes |
 | AD-11 | Civil dates, integer cents | None found | No |

@@ -1,6 +1,6 @@
 # AGENTS.md — PayClock (`payclock-ca`)
 
-Canonical instructions for any agent or person working in this repository. Since 2026-11-11 (build milestone B1, owner-authorised before the Phase 0 gate) it holds the ten planning documents plus the foundation and deterministic date engine on branch `feat/b1-foundation`: no UI, no real provider, no lawyer-signed rule version. Status of every check: [verification-report-fixing.md section 9](verification-report-fixing.md#9-build-milestone-b1-2026-11-11). **Commands are proposed unless listed under "Commands that exist" below.**
+Canonical instructions for any agent or person working in this repository. Since 2026-11-11 it holds the ten planning documents plus code: build milestone B1 (owner-authorised before the Phase 0 gate: foundation and deterministic date engine, branch `feat/b1-foundation`) and B2 (branch `feat/b2-local-auth`: local password-plus-TOTP sign-in with database sessions, invitation and reset links by email through SMTP to the local Mailpit inbox, evidence files through the S3 API to local MinIO). No UI, no real provider account, no lawyer-signed rule version; Supabase Auth is a deferred option. Status of every check: [verification-report-fixing.md sections 9 and 10](verification-report-fixing.md#10-build-milestone-b2-2026-11-11). **Commands are proposed unless listed under "Commands that exist" below.**
 
 ## 1. Reading order
 
@@ -74,6 +74,13 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | Audit row | `audit` | `packages/domain/src/audit.ts` |
 | Durable recompute after a rule or holiday change; stale scan; worker loop (queue under RLS; claims via `claim_recompute_pending`; `DrainHooks` test seams) | `enqueueAllProjects`, `enqueueStale`, `drainPending`, `startDrainLoop` | `packages/domain/src/pending.ts`, `apps/worker/src/drain.ts` |
 | Stale-on-read check | `staleRunIds` (used by `getInvoice`, `getRecomputation`) | `packages/domain/src/queries.ts` |
+| Sign-in, sessions, CSRF token, invitations (incl. first owner), password reset, TOTP enrolment, team removal (B2) | `LocalAuthService` (`signIn`, `authenticate`, `checkCsrf`, `signOut`, `revokeAllForUser`, `inviteFirstOwner`, `invite`, `acceptInvitation`, `requestPasswordReset`, `completePasswordReset`, `beginTotp`, `confirmTotp`, `listMemberships`, `removeMembership`) | `packages/domain/src/auth/service.ts` |
+| Password hash (scrypt), tokens, TOTP (RFC 6238), AES-GCM, HMAC; password rules | `hashPassword`, `verifyPassword`, `randomToken`, `sha256`, `totpCode`, `verifyTotp`, `encrypt`, `decrypt`, `hmacHex`; `checkPassword` | `packages/domain/src/auth/crypto.ts`, `password-policy.ts` |
+| Evidence files: upload with type and size checks, 5-minute link, download; scanners | `uploadDocument`, `documentLink`, `downloadDocument`, `localSignatureScanner`, `noScanner` | `packages/domain/src/documents.ts` |
+| Mail (SMTP; Mailpit locally) | `createSmtpMailer`, `MemoryMailer` | `packages/platform/src/mailer.ts` |
+| Object storage (S3 API; MinIO locally); tenant-keyed object names | `createS3BlobStore`, `MemoryBlobStore`, `storageKey`, `keyBelongsTo` | `packages/platform/src/storage.ts` |
+| Session cookie attributes and parsing; `AuthProvider` interface | `sessionCookie`, `clearedCookie`, `readCookie` | `apps/web/src/auth.ts` (fake provider only in `apps/web/test/fake-auth.ts`) |
+| Identity transaction (no tenant) | `TenantDb.withIdentity` | `packages/db/src/client.ts` |
 
 ### Commands that exist (B1)
 
@@ -81,19 +88,21 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 
 | Command | Does |
 |---|---|
-| `make setup` | `npm install`, create role `payclock_app` (NOSUPERUSER NOBYPASSRLS) and git-ignored `.env.local` / `.env.test`, migrate `payclock_dev` |
-| `make dev` / `make dev-check` | Migrate, seed, start API on 8104 and the worker, print "ready" from `/readyz`; `dev-check` then stops |
+| `make setup` | `npm install`, create role `payclock_app` (NOSUPERUSER NOBYPASSRLS) and git-ignored `.env.local` / `.env.test` (auth key, Mailpit and MinIO settings; names only in `workspace/.env.example`), migrate `payclock_dev` |
+| `make dev` / `make dev-check` | Migrate, seed (first-owner invitations go to Mailpit at http://127.0.0.1:8025), start API on 8104 and the worker, print "ready" from `/readyz` (database, queue, storage); `dev-check` then stops |
 | `make lint`, `make typecheck` | ESLint with import boundaries; `tsc --noEmit` |
-| `make test-unit`, `make test-integration` | Vitest; integration drops and re-migrates `payclock_test` first |
+| `make test-unit`, `make test-integration` | Vitest; integration drops and re-migrates `payclock_test` first and needs Mailpit (SMTP 1025, API 8025) and MinIO (9000, bucket `payclock-dev`) running |
 | `make golden`, `make parity` | `scripts/golden-verify.ts`; `scripts/orm-parity.ts --test` |
 | `npm run db:migrate`, `npm run db:migrate-test`, `npm run seed` | Migrations plus queue schema; synthetic seed (refuses outside local/test) |
 | `npm run rules:sync [-- --test]` | New draft revision for any changed rule version, holiday table per s. 88 for 2018-2040, recompute of every stored deadline |
+
+Sign-in API (B2): `POST /api/v1/auth/sign-in`, `/auth/sign-out`, `/auth/sessions/revoke-all`, `/auth/password-reset/request`, `/auth/password-reset/complete`, `/auth/invitations/accept`, `/auth/totp/enroll`, `/auth/totp/confirm`, `GET /auth/session`; `POST /invitations`, `GET /memberships`, `DELETE /memberships/{id}`; `POST /documents`, `GET /documents/{id}/link`, `GET /documents/{id}/content`.
 
 Still proposed: Docker Compose, CI, staging, `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
 
 ## 6. Tenant safety
 
-Every tenant table has `tenant_id` and row-level security. Open database connections only through the tenant-scoped client. Jobs carry the tenant and refuse to run without it. Storage keys and any cache key include the tenant. Cross-tenant requests return 404. New endpoints need a cross-tenant test (`IT-01` pattern).
+Every tenant table has `tenant_id` and row-level security. Open database connections only through the tenant-scoped client. Jobs carry the tenant and refuse to run without it. Storage keys and any cache key include the tenant. Cross-tenant requests return 404. New endpoints need a cross-tenant test (`IT-01` pattern). Identity tables (`app_user`, `user_credential`, `auth_session`, `auth_token`, `auth_throttle`) are global, hold no tenant business data and store tokens only as SHA-256; a session is honoured only with a live membership of its tenant, checked on every request.
 
 ## 7. Migrations
 

@@ -1,7 +1,7 @@
 /** Domain errors mapped to HTTP by apps/web. Cross-tenant access is always NotFound (404). */
 export class DomainError extends Error {
   constructor(
-    readonly status: 400 | 403 | 404 | 409 | 422,
+    readonly status: 400 | 403 | 404 | 409 | 413 | 415 | 422,
     readonly code: string,
     message: string,
     readonly fields: string[] = [],
