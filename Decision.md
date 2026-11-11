@@ -15,7 +15,7 @@ Repository `payclock-ca`. Written 2026-11-10; revised the same day after indepen
 
 ## 1. Proposed decision
 
-**Do not build yet. Run Phase 0 by hand (tasks `T-0.1.1` to `T-0.3.4`) and build only if the gates in section 10 pass. No message is sent and no report is delivered until legal questions `LQ-01` and `LQ-02` are answered in writing.** `[P]`
+**Do not build yet. Run Phase 0 by hand (tasks `T-0.1.1` to `T-0.3.4`) and build only if the gates in section 10 pass. No message is sent and no report is delivered until legal questions `LQ-01` and `LQ-02` are answered in writing.** `[P]` **C2 (2026-11-11):** no lawyer is hired for now (owner decision); `LQ-01` to `LQ-03` are answered by [compliance/self-check.md](compliance/self-check.md), owner sign-off recorded, not legal advice. The answer to `LQ-02` is that a hand-run per-firm report is high risk, so no report is delivered until open decision 9 (section 12) chooses a Phase 0 model.
 
 This departs from the brief's verdict of "pursue" `[C]`. Reason: the brief's gap statement, "No product found that tracks Canadian provincial prompt-payment, adjudication, holdback and lien dates per invoice for the unpaid party" `[C]`, **did not verify**. Two Ontario products were open on 2026-11-10: PaySub at CAD 29 and 59 per month `[S: SRC-05]` and Tiercord at CAD 59, 149 and 599 per month `[S: SRC-06]`. Tiercord's public pages cover every statutory clock the brief planned. The decision therefore narrows to one question (section 3).
 
@@ -86,7 +86,7 @@ Like-for-like price for the brief's buyer (CAD 1M-15M revenue `[C]`), monthly bi
 Two non-feature differences were claimed in the first draft and are weaker than stated:
 
 - **Done-for-you loading** ("all open invoices loaded by us" `[C]`). Tiercord's free trial already includes dedicated onboarding `[S: SRC-06]`. What remains is narrower: someone works out which facts are missing and what to ask for. Whether that is permitted for a non-licensee is `LQ-02`.
-- **A lawyer-signed rule table** `[C]`. Still a difference on the evidence seen, and unproven as a reason to buy.
+- **A lawyer-signed rule table** `[C]`. Still a difference on the evidence seen, and unproven as a reason to buy. **C2 (2026-11-11): withdrawn.** No lawyer will sign for now; the table is checked by two people against the statute ([compliance/self-check.md](compliance/self-check.md#4-l-01-to-l-03--rule-versions-disclaimer-terms-and-templates-without-a-lawyer) section 4), which neither competitor's page claims either, and must not be marketed as lawyer-reviewed.
 
 The backup channel (association webinars, lawyers, bookkeepers `[C]`) is already being worked by Tiercord's association kit; PayClock would arrive second with less material. If `T-0.1.4` shows Tiercord already handles candidate 1 for a payee, the product hypothesis is dead (gate G0).
 
@@ -232,8 +232,8 @@ Termination example. Contract terminated 2026-09-10 (EV-17); Form 8 published 20
 | When paid | In advance, before loading; card payment link or e-transfer | `[P]` |
 | Who signs, who pays | The firm's owner signs a one-page pilot agreement; the firm pays | `[P]` |
 | Who supplies data | Office manager or controller | `[P]` |
-| Delivery before software exists | By hand under controls `HR-1` to `HR-6` ([execution-plan.md section 3.1](execution-plan.md#31-hand-run-controls-phase-0)): lawyer-reviewed rule spreadsheet, every date recomputed by the named Checker, versioned schedule, same-day re-issue and a phone call when a rights date moves earlier | `[C]` "done by hand"; controls `[P]` |
-| Precondition | `LQ-02` answered: either the service is confirmed as permitted for a non-licensee in the form offered, or it is delivered under the engaged lawyer's supervision, or it is not offered | `[P]` |
+| Delivery before software exists | By hand under controls `HR-1` to `HR-6` ([execution-plan.md section 3.1](execution-plan.md#31-hand-run-controls-phase-0)): lawyer-reviewed rule spreadsheet, every date recomputed by the named Checker, versioned schedule, same-day re-issue and a phone call when a rights date moves earlier. C2: "lawyer-reviewed" becomes "checked by the Rules lead and the Checker" (self-check section 4); hand delivery is not offered until open decision 9 | `[C]` "done by hand"; controls `[P]` |
+| Precondition | `LQ-02` answered: either the service is confirmed as permitted for a non-licensee in the form offered, or it is delivered under the engaged lawyer's supervision, or it is not offered. **C2 (2026-11-11): answered by [compliance/self-check.md](compliance/self-check.md#2-lq-02--law-society-act-is-this-providing-legal-services) section 2**, owner sign-off recorded: the hand-run per-firm pilot is high risk and no supervising lawyer exists, so it is not offered in this form; the owner chooses option B, A1 or A2 (open decision 9) | `[P]` |
 | Refund criterion (objective) | Full refund within 5 business days if PayClock misses either: (a) a schedule covering 100% of supplied invoices within 2 business days of complete data, each invoice dated or marked "not computable: missing fact X"; (b) all 4 weekly emails on the agreed weekday. A business day is Monday to Friday except the holidays in Legislation Act s. 88, Toronto time | `[P]` |
 | Brief's success measure | "at least one invoice collected or one notice sent because of the tracker" `[C]`. Measured (section 5.3) but not a refund condition, because "because of" cannot be judged objectively | `[C]`, treatment `[P]` |
 | Conversion step | Day 25: the launch plan at CAD 99 per month is offered (section 7). The buyer enters a card in hosted checkout. Recurring billing starts day 31; the CAD 99 pilot fee is credited against the first recurring invoices until used up, which at the launch price is the whole first invoice. No conversion without that explicit step. In Phase 0 the subscription is created by hand in the payment provider's dashboard; in the application it is `MH-13` | `[C]` credit and launch price; mechanics `[P]` |
@@ -263,17 +263,19 @@ Every item may be answered "not known"; unknown facts are the measurement in sec
 
 The chat requires a lawyer-written disclaimer `[C]`; the brief requires lawyer review of rule tables before launch `[C]`. A disclaimer does not by itself settle either of the two rules below, which the author read on 2026-11-10.
 
+**C2 owner decision (2026-11-11).** No lawyer will be hired for now. The questions below are answered by the business's own research of primary sources in [compliance/self-check.md](compliance/self-check.md), which says at the top that it is not legal advice; the owner accepts the residual risk stated there. This replaces the chat's lawyer-written disclaimer `[C]` with the self-written one in self-check section 8.1, and lawyer review of rule tables with a two-person check (self-check section 4). The original questions stay below as written.
+
 **Legal services** `[S: SRC-16]`. Under the Law Society Act a person provides legal services by conduct "that involves the application of legal principles and legal judgment with regard to the circumstances or objectives of a person" (s. 1(5)), including giving advice on a person's legal rights and selecting or drafting, on a person's behalf, "a document that affects the legal interests, rights or responsibilities of a person" (s. 1(6) paras. 1, 2.vi). Only a licensee may provide legal services in Ontario (s. 26.1(1)); the exemptions in s. 1(8) cover a corporation's own employees, individuals acting for themselves, and classes prescribed by by-law (by-laws not read). Honest position: a schedule made by hand for one firm from that firm's facts, and a request letter drafted for it, by a founder who is not a licensee, sits close to that definition whether or not money changes hands. Self-serve software in which the customer enters facts and a published rule is applied is a different activity and is what the two competitors describe themselves as; that is the author's reading, not advice. The author cannot conclude that the Phase 0 service is permitted.
 
 **Commercial electronic messages** `[S: SRC-15]`. CASL prohibits sending a commercial electronic message unless the recipient has consented, expressly or impliedly, and the message identifies the sender, gives contact information valid for at least 60 days, and sets out an unsubscribe mechanism (s. 6(1)-(3), s. 11(1)). Consent is implied where the recipient "has conspicuously published" the address without a statement refusing unsolicited messages and the message is relevant to the person's business role (s. 10(9)(b)). Honest position: an address taken from the firm's own website or a public association directory may meet that test; an address supplied by a contact-data tool `[C]` does not show conspicuous publication and is not used for email. Phone calls are outside what the author read.
 
-| ID | Question for the lawyer, in writing, before the gated step | Gates |
-|---|---|---|
-| LQ-01 | Does the outreach in section 9 meet CASL: implied consent under s. 10(9)(b) for each address source, the identification and unsubscribe wording, and record-keeping? | First message, `T-0.2.1` |
-| LQ-02 | Is preparing a per-firm deadline schedule and draft requests, free or paid, the provision of legal services under Law Society Act s. 1(5)-(6)? If so, can it be delivered under the lawyer's supervision or name, and at what cost? Is the self-serve application outside the definition? | First free report, `T-0.2.3`; first paid pilot, `T-0.3.1` |
-| LQ-03 | What liability cap, disclaimer and insurance should the pilot agreement and terms carry, and what does errors-and-omissions cover cost? | First paid pilot, `T-0.3.1` |
+| ID | Question for the lawyer, in writing, before the gated step | Gates | C2 status (2026-11-11) |
+|---|---|---|---|
+| LQ-01 | Does the outreach in section 9 meet CASL: implied consent under s. 10(9)(b) for each address source, the identification and unsubscribe wording, and record-keeping? | First message, `T-0.2.1` | Answered by self-check section 1, owner sign-off recorded. Risk low (email), low to medium (calls). Footer and checklist there |
+| LQ-02 | Is preparing a per-firm deadline schedule and draft requests, free or paid, the provision of legal services under Law Society Act s. 1(5)-(6)? If so, can it be delivered under the lawyer's supervision or name, and at what cost? Is the self-serve application outside the definition? | First free report, `T-0.2.3`; first paid pilot, `T-0.3.1` | Answered by self-check section 2, owner sign-off recorded. Hand-run per-firm schedule: high risk, not offered as written; self-serve software: medium. Phase 0 model is open decision 9 `[P]` |
+| LQ-03 | What liability cap, disclaimer and insurance should the pilot agreement and terms carry, and what does errors-and-omissions cover cost? | First paid pilot, `T-0.3.1` | Answered by self-check section 3, owner sign-off recorded. Risk medium. Cap: greater of 12 months' fees and CAD 100 `[P]`; E&O about CAD 500-3,000 a year (secondary, no quote) |
 
-If LQ-02 is answered "yes, and it cannot be supervised", Phase 0 changes to interviews plus a demonstration on synthetic data, and gate G1 is re-based on signed pilot commitments for the application; the stop rule is then re-computed.
+If LQ-02 is answered "yes, and it cannot be supervised", Phase 0 changes to interviews plus a demonstration on synthetic data, and gate G1 is re-based on signed pilot commitments for the application; the stop rule is then re-computed. C2: the self-check's answer is close to that case (no lawyer, so no supervision); this fallback is option B in self-check section 2.3, recommended, pending open decision 9. The stop rule is not re-computed until the owner chooses.
 
 Lawyer-required points during operation (a lawyer licensed in Ontario; PayClock does none of this itself):
 
@@ -290,6 +292,8 @@ Lawyer-required points during operation (a lawyer licensed in Ontario; PayClock 
 | L-09 | Holiday and office-closure extension of lien and adjudication limits, and the day from which CLK-10 counts. The interest rate when no proceeding exists: the prejudgment rate is defined by "the quarter in which the proceeding was commenced" (Courts of Justice Act s. 127(1)) `[S: SRC-14]`, and s. 6.9 does not say which quarter applies before any proceeding |
 | L-10 | Any action already sent on a date later superseded |
 | L-11 | Termination: Form 8 published late, not published, or publication unknown; a notice of termination published before 2026-01-01; a disputed termination (s. 31(8)) |
+
+C2 (2026-11-11): L-01 to L-03 are answered by self-check section 4 (rule versions and template wording approved by the Rules lead and the Checker against e-Laws; disclaimer and terms from self-check section 8), owner sign-off recorded. L-04 to L-11 are not answered; they stay with the customer's own lawyer and the dependent output stays withheld or flagged, as the engine already does (self-check section 5).
 
 ## 7. One paying account, one billable unit, the prices
 
@@ -327,7 +331,7 @@ One CAC definition used everywhere: **cash spent on acquisition per converted pa
 | Variable per account | AI 1.50 + API 0.50 + hosting 1.50 + storage 0.30 + messaging 1.50 + support 6.00 + other 3.00 + payment (2.9% x 99 + 0.30 = 3.17) = 17.47 | `[C]` |
 | Initial acquisition (CAC) | 350 | `[C]` |
 | Churn replacement | 3.5% x 350 = 12.25 per account-month | `[C]` |
-| Not in any figure (missing inputs) | Errors-and-omissions insurance and any liability reserve (`LQ-03`); the lawyer's answers to LQ-01 to LQ-03 and any supervision fee beyond the CAD 700 `[C]`; the Checker's time in Phase 0 (20-33 hours, non-cash) | none |
+| Not in any figure (missing inputs) | C2: the figures are unchanged and not re-run; with no lawyer the CAD 700 legal review in startup cash and "Other 3" are not spent, so both are upper bounds `[P]`. Errors-and-omissions insurance (about CAD 500-3,000 a year, secondary range, no quote, self-check section 3) and any liability reserve (`LQ-03`); the lawyer's answers to LQ-01 to LQ-03 and any supervision fee beyond the CAD 700 `[C]`; the Checker's time in Phase 0 (20-33 hours, non-cash) | none |
 
 ### 8.2 Base case
 
@@ -416,9 +420,9 @@ A sub with CAD 3M revenue and receivables at 67 days: collecting 10 days sooner 
 
 **Prospect list.** Sources: ECAO member directory, MCA Ontario and Toronto lists, Toronto Construction Association directory `[C]`. Count: unknown (section 8.4). Build (`T-0.1.1`): transcribe firm, trade, city, website; for email, record only an address published on the firm's own site or in the directory, with the page address and the date seen, and note any "no unsolicited email" statement; firms with no such address are phone-only; remove duplicates across lists by normalised firm name and domain; mark disqualifiers; record the final distinct count and the emailable count. Cost about CAD 150 per 100 prospects `[C]`.
 
-**Channel and sequence.** Cold email plus phone `[C]`, after `LQ-01`. Day 0 email; day 2 call to the office line asking for whoever does receivables `[C]`; day 5 follow-up email; day 12 last note. An unsubscribe is honoured the same day and logged; no further message of any kind goes to that address. Volume: 100 new prospects and 30 calls a week `[C]`.
+**Channel and sequence.** Cold email plus phone `[C]`, after `LQ-01` (C2: answered by self-check section 1; follow its checklist, including the internal do-not-call list for calls). Day 0 email; day 2 call to the office line asking for whoever does receivables `[C]`; day 5 follow-up email; day 12 last note. An unsubscribe is honoured the same day and logged; no further message of any kind goes to that address. Volume: 100 new prospects and 30 calls a week `[C]`.
 
-**Message (synthetic).** Bracketed items are filled per prospect; the footer is on every message.
+**Message (synthetic).** Bracketed items are filled per prospect; the footer is on every message. C2: the message below offers a hand-run schedule, which self-check section 2 rates high risk; it is not sent as written. Under option B use the revised offer and footer in self-check section 8.3.
 
 > Subject: which of your [Company] invoices can be dated under the Construction Act
 >
@@ -442,7 +446,7 @@ A sub with CAD 3M revenue and receivables at 67 days: collecting 10 days sooner 
 
 | Objection | Honest answer |
 |---|---|
-| "Tiercord and PaySub already do this, their trials are free, and Tiercord's includes onboarding." | True as advertised, and for a firm billing under CAD 1M Tiercord's CAD 59 plan offers more. PayClock's claim is narrower: it tells you which dates cannot be known from your records and what to ask for, on a rule table an Ontario lawyer signed. If you already use either tool, you are not our customer. |
+| "Tiercord and PaySub already do this, their trials are free, and Tiercord's includes onboarding." | True as advertised, and for a firm billing under CAD 1M Tiercord's CAD 59 plan offers more. PayClock's claim is narrower: it tells you which dates cannot be known from your records and what to ask for, on a rule table checked by two people against the statute (C2: not lawyer-reviewed; never say otherwise). If you already use either tool, you are not our customer. |
 | "I do not want to upset my GC by sending notices." `[C]` | The schedule only shows dates. You decide whether anything is sent; nothing leaves PayClock to your GC. |
 | "My lawyer handles this." / "Is this legal advice?" `[C]` | It is not legal advice and does not replace your lawyer. It applies published timelines, shows the section, and marks the points where you need your lawyer (section 6). It tells you when to call. |
 
@@ -501,17 +505,21 @@ So roughly one time in three the full set stops a business that meets every assu
 | # | Decision | Needed by |
 |---|---|---|
 | 1 | Accept the change from "pursue" to "validate by hand, then decide" | Before `T-0.2.1` |
-| 2 | Name the Ontario construction lawyer; confirm what CAD 700 covers; put LQ-01 to LQ-03 | `T-0.1.3`, `T-0.1.5` |
+| 2 | Name the Ontario construction lawyer; confirm what CAD 700 covers; put LQ-01 to LQ-03. **Decided 2026-11-11 by the owner: no lawyer for now; LQ-01 to LQ-03 and L-01 to L-03 answered by compliance/self-check.md, owner accepts the residual risk** | `T-0.1.3`, `T-0.1.5` |
 | 3 | Accept the revised stop rule (G0 to G3) or keep the chat's single rule | Before `T-0.2.1` |
 | 4 | Launch at a single CAD 99 plan (section 7) or on the three tiers | `T-0.3.1` |
 | 5 | Where the VPS is located; if not in Canada, use `AD-09` hosting | `T-2.1.4` |
 | 6 | Name the Checker: a team member other than the person who computes the dates. With a team of one, Phase 0 reports cannot start | `T-0.1.2` |
 | 7 | `[P]` (C1): the pool used in section 8.4 ("a pool of 1,500" `[A]`) is unchanged. StatCan gives 4,516 Ontario locations in the two trades with 5-49 employees as an upper bound, not a reachable list. Keep 1,500 until `T-0.1.1` counts the list, or restate it now | `T-0.1.1` |
 | 8 | `[P]` (C1): with PaySub and Tiercord both advertising notices and lien deadlines, the gap is one unverified hypothesis (EV-01 unknown, section 3). Confirm that `T-0.1.4` runs before any outreach | Before `T-0.2.1` |
+| 9 | `[P]` (C2): choose the Phase 0 model without a lawyer (self-check section 2.3): B, interviews plus a synthetic demonstration with G1 re-based (recommended); A1, self-serve intake screen; A2, founder types a fixed intake form verbatim (not recommended). Until chosen, no report or paid pilot is delivered | Before `T-0.2.3` |
+| 10 | `[P]` (C2): adopt the disclaimer, terms clauses, email footers and wording rules in self-check sections 8 and 9; Ontario law; liability cap; get one E&O and cyber insurance quote | Before `T-0.2.1` (footer), `T-0.3.1` (terms, insurance) |
 
 ## 13. Sources and assumptions
 
 Date consulted for every row: 2026-11-10, except where a row gives 2026-11-11.
+
+C2 compliance self-check on 2026-11-11 (owner decision: no lawyer; not legal advice): SRC-15 re-opened with ss. 1(2), 6(5)-(8), 11, 13, 20(4) and SOR/2012-36; SRC-16 re-opened through the e-Laws data service (currency date 2026-11-06) with s. 26.2, and LSO By-Law 4 ss. 28 and 30 read; new SRC-19 to SRC-21. Every source used for the legal answers, with its access status, is listed in compliance/self-check.md section 12.
 
 C1 re-checks on 2026-11-11: SRC-01 s. 36(2) re-read on the rendered e-Laws page (currency date 6 November 2026); SRC-05 https://paysub.ca re-opened (lien rights engine, "Generate legal notices in one click", GC emails at day -7, 0, +3, +14, Solo CAD 29, Business CAD 59, no page date); SRC-06 https://tiercord.ca/pricing re-opened (Starter CAD 59, CAD 49 billed annually, up to CAD 1M billed a year; all plans include all capabilities, "unlimited ... notices" and statutory declarations, and AI adjudication assistance; no page date).
 
@@ -532,8 +540,11 @@ C1 re-checks on 2026-11-11: SRC-01 s. 36(2) re-read on the rendered e-Laws page 
 | SRC-18 | Statistics Canada, table 33-10-1174-01, "Canadian Business Counts, with employees, June 2026" (released 2026-08-14). https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3310117401 ; CSV https://www150.statcan.gc.ca/n1/tbl/csv/33101174-eng.zip | Ontario | NAICS 238210 and 238220 by employment size | Consulted 2026-11-11: full CSV downloaded and Ontario rows read. Counts are locations, not firms |
 | SRC-13 | Sources in the brief's research record (Osler, BC government, BCCA, Levelset, Siteline, Knowify) | Mixed | As quoted, with the brief's status | Not reopened by the author |
 | SRC-14 | Courts of Justice Act, R.S.O. 1990, c. C.43, ss. 127-128. https://www.ontario.ca/laws/statute/90c43 | Ontario | Definition of prejudgment interest rate; quarterly table | Open. The published rate table itself was not opened; no rate value is used |
-| SRC-15 | Canada's anti-spam legislation, S.C. 2010, c. 23, ss. 6, 10(9), 11. https://laws-lois.justice.gc.ca/eng/acts/E-1.6/ | Canada | Consent, identification, unsubscribe | Open. Regulations not read |
-| SRC-16 | Law Society Act, R.S.O. 1990, c. L.8, ss. 1(5)-(8), 26.1. https://www.ontario.ca/laws/statute/90l08 | Ontario | Definition of providing legal services; prohibition; exemptions | Open. Law Society by-laws not read |
+| SRC-15 | Canada's anti-spam legislation, S.C. 2010, c. 23, ss. 6, 10(9), 11. https://laws-lois.justice.gc.ca/eng/acts/E-1.6/ | Canada | Consent, identification, unsubscribe | Open. Regulations SOR/2012-36 read on 2026-11-11 (C2) |
+| SRC-16 | Law Society Act, R.S.O. 1990, c. L.8, ss. 1(5)-(8), 26.1. https://www.ontario.ca/laws/statute/90l08 | Ontario | Definition of providing legal services; prohibition; exemptions | Open. By-Law 4 read on 2026-11-11 (C2, SRC-19) |
+| SRC-19 | Law Society of Ontario By-Law 4 (https://lso.ca/about-lso/legislation-and-rules/by-laws/by-law-4) and Access to Innovation FAQs (https://lso.ca/about-lso/initiatives/access-to-innovation/faqs) | Ontario | Exemptions from legal services; regulatory sandbox | Open in a browser 2026-11-11 |
+| SRC-20 | National DNCL operator, Exemptions (https://lnnte-dncl.gc.ca/en/Organization/Exemptions); CRTC Unsolicited Telecommunications Rules (https://crtc.gc.ca/eng/trules-reglest.htm) | Canada | Calls to businesses | DNCL page open 2026-11-11; CRTC rules page blocked by a security check, not read |
+| SRC-21 | compliance/self-check.md (this repository) | n/a | Answers to LQ-01 to LQ-03 and L-01 to L-03 | Written 2026-11-11; not legal advice |
 | SRC-17 | Supabase documentation, database backups. https://supabase.com/docs/guides/platform/backups | n/a | Daily backups on Pro (7 days); point-in-time recovery is an add-on | Open. Add-on price not read |
 
 Assumptions preserved: all unit-economics inputs `[C]` are model assumptions, not findings; launch-plan reading of the prices; pilot-to-paying 60%; one report per meeting; pool size; plan and tier limits; act-by buffer; founder-hour composition; true rates behind G1b and G1c; that Tiercord's and PaySub's products behave as their public pages say.

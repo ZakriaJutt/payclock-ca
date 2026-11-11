@@ -102,11 +102,11 @@ Legal advice; preparing or registering a claim for lien, certificate of action, 
 
 | Item | Kind | Note |
 |---|---|---|
-| Ontario construction lawyer | Dependency | L-01 to L-03 before any customer sees a date |
+| Ontario construction lawyer | Dependency | L-01 to L-03 before any customer sees a date. C2 (2026-11-11): answered by [compliance/self-check.md](compliance/self-check.md) section 4, owner sign-off recorded: no lawyer for now; a two-person check (Rules lead and Checker) against e-Laws replaces the memo |
 | Buyer's aging list and facts | Dependency | [Decision.md 5.2](Decision.md#52-what-the-buyer-must-provide) |
 | Statute changes | Constraint | New rule version, effective-dated; never edit a signed version |
 | PIPEDA; records and files stored in Canada | Constraint `[C]` | `AD-09`. Two processors are outside Canada: the email provider (message metadata and the limited content in MH-07) and the payment provider (billing contact only); listed in [TRD.md 8.10](TRD.md#810-subprocessors-and-data-location) |
-| Legal questions LQ-01 to LQ-03 | Dependency | Gate the first message, first report and first paid pilot ([Decision.md section 6](Decision.md#6-dates-and-templates-not-legal-advice-what-that-rests-on)) |
+| Legal questions LQ-01 to LQ-03 | Dependency | Gate the first message, first report and first paid pilot ([Decision.md section 6](Decision.md#6-dates-and-templates-not-legal-advice-what-that-rests-on)). C2: answered by compliance/self-check.md sections 1-3, owner sign-off recorded 2026-11-11; Phase 0 model open (Decision 12 item 9) |
 | Not legal advice | Constraint `[C]` | MH-09 |
 | Team of 1-3; 110 hours estimated `[C]` | Constraint | The estimate predates this scope; see [execution-plan.md section 5](execution-plan.md#5-estimate-summary) |
 
@@ -120,7 +120,7 @@ Legal advice; preparing or registering a claim for lien, certificate of action, 
 | M-03 | Commercial | Pilots converting to paying account | First recurring invoice issued and settled | Paid pilots arising from the first 20 reports | Day 31-45 of each pilot; all known by day 124 | None | At least n / 3 rounded up (G2); 60% `[A]` |
 | M-04 | Workflow | Dated-action rate ([Decision.md 5.3](Decision.md#53-pilot-metric-computable)) | `action` rows with sent date and copy, or payments after an alert | Paid pilots | 30 days | Self-reported prior 30 days | 60% |
 | M-05 | Workflow | Share of invoices fully dated (all applicable clocks `computed`) | `deadline.state` | Open invoices | Weekly | Phase 0 tally | Report only |
-| M-06 | Failure | Deadlines differing from the lawyer-checked hand calculation | Golden fixtures `UT-12`; monthly sample of 20 | Deadlines checked | Each release; monthly | 0 by construction | 0 |
+| M-06 | Failure | Deadlines differing from the lawyer-checked hand calculation (C2: the two-person-checked calculation) | Golden fixtures `UT-12`; monthly sample of 20 | Deadlines checked | Each release; monthly | 0 by construction | 0 |
 | M-07 | Failure | Superseded dates still shown or reminded | `IT-07`, `IT-08`; production query for unsuperseded duplicates | Recomputations | Daily | n/a | 0 |
 | M-08 | Failure | Saves blocked for lack of a date | Validation error log by field | Save attempts | Weekly | n/a | 0 for event dates |
 | M-09 | Commercial | Monthly churn | Cancelled / active at month start | Paying accounts | Monthly | 3.5% `[C]` assumption | At or under 3.5% |

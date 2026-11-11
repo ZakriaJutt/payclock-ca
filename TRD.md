@@ -8,7 +8,7 @@ Requirements: [PRD.md](PRD.md). Top quality goals, in order: (1) date correctnes
 
 ## 2. Constraints
 
-Team of 1-3 `[C]`; Canadian data residency and PIPEDA `[C]`; statutory dates, interest, access and applicability are deterministic code; a rule version is immutable once signed (L-01); no outbound message to third parties; planning repository holds Markdown only.
+Team of 1-3 `[C]`; Canadian data residency and PIPEDA `[C]`; statutory dates, interest, access and applicability are deterministic code; a rule version is immutable once signed (L-01; C2: signed by the two-person self-check, not a lawyer); no outbound message to third parties; planning repository holds Markdown only.
 
 ## 3. Context and scope
 
@@ -23,13 +23,13 @@ flowchart LR
   WK -->|API| PM[Postmark: email to workspace users only]
   W -->|hosted checkout, webhooks| SP[Stripe]
   W --> AU[Supabase Auth]
-  L[Lawyer] -. signed memo, outside the system .-> O
+  L[Checker, two-person self-check C2] -. signed record, outside the system .-> O
 ```
 
 | External system | Direction | Data | Failure behaviour |
 |---|---|---|---|
 | Supabase Auth (deferred option; B2 runs local sign-in in the app and database instead) | in | Credentials, sessions | Sign-in unavailable; no data path affected |
-| Postmark (outside Canada) | out | Reminder and digest emails to workspace users: clock name, date, certainty, link. No amounts, no contractor or owner names, no invoice numbers | Retry, then reconcile (section 8.4) |
+| Postmark (outside Canada) | out | Reminder and digest emails to workspace users: clock name, date, certainty, link. No amounts, no contractor or owner names, no invoice numbers. C2: each carries the product footer (sender, contact, preferences link, short disclaimer) in compliance/self-check.md 8.4 (CASL s. 6(2), 6(6)); no promotion in these emails | Retry, then reconcile (section 8.4) |
 | Stripe (outside Canada) | both | Billing contact, plan, subscription status; card data stays with Stripe; no invoice or project data | Webhook retry and state fetch (`AD-13`); 7 days of grace |
 | e-Laws | none at runtime | Rule text is copied into rule versions by the operator | n/a |
 
@@ -292,20 +292,20 @@ Planned controls are not evidence of compliance; verification status is in [veri
 | AD-04 | Append-only events; deadlines recomputed in the correction's transaction | Longer transaction (milliseconds at this size); no stale window | No |
 | AD-05 | pg-boss in Postgres, no Redis | Lower throughput ceiling; one fewer service | Revisit above 50 jobs/s |
 | AD-06 | No AI in MVP | Manual entry cost; removes a review burden | Yes |
-| AD-07 | Templates are fixed lawyer-reviewed text with merge fields | Less flexible; reviewable once (L-03) | No |
+| AD-07 | Templates are fixed lawyer-reviewed text with merge fields (C2: reviewed by the Rules lead and the Checker against compliance/self-check.md section 9; each carries the short disclaimer 8.1) | Less flexible; reviewable once (L-03) | No |
 | AD-08 | Password plus TOTP; no magic link (departs from brief). B2: implemented locally (`LocalAuthService`); Supabase Auth deferred | More friction than a link | No |
 | AD-09 | App and worker on Fly.io in its Toronto region; database, storage and auth on Supabase ca-central. Vercel dropped because the worker needs a long-running process. The founder's VPS is used only if it is in Canada (location not stated) | Two vendors | Host choice until `T-2.1.4` |
 | AD-10 | Email only; SMS deferred (departs from brief) | Reminders may be missed | Yes |
 | AD-11 | Civil dates, integer cents | None found | No |
 | AD-12 | CSV import; QuickBooks and Xero deferred (departs from brief) | Manual export by the user | Yes |
 | AD-13 | Billing through Stripe hosted checkout and subscriptions; the workspace's `plan` becomes `launch` (CAD 99 per month); the pilot fee is a customer credit balance; webhooks are deduplicated and state is re-fetched. Billing state never hides an existing deadline | Dependence on one provider; manual subscriptions in Phase 0 | Until Phase 6 |
-| AD-14 | Two-person rule: the Rules lead drafts a rule version, the Checker approves it against the lawyer's memo | Needs two people | No |
+| AD-14 | Two-person rule: the Rules lead drafts a rule version, the Checker approves it against the lawyer's memo (C2: against the e-Laws text and the self-check record, compliance/self-check.md section 4; `legal_signoff.licence_jurisdiction` = `none: two-person self-check`) | Needs two people | No |
 
 ## 10. Quality requirements
 
 | Attribute | Workload | Target `[P]` | Future verification |
 |---|---|---|---|
-| Date correctness | 200 golden cases incl. Phase 0 invoices | 100% equal to lawyer-checked dates | `UT-12` in CI |
+| Date correctness | 200 golden cases incl. Phase 0 invoices | 100% equal to lawyer-checked dates (C2: two-person-checked) | `UT-12` in CI |
 | Currency | 500 corrections, 20 concurrent | 0 superseded deadlines readable as current | `IT-05`, `IT-07`, invariant job |
 | Dashboard latency | 60 open invoices, 20 users | p95 under 800 ms | Load test `T-5.1.5` |
 | Correction latency | Subcontract with 40 invoices | p95 under 1.5 s including recompute | Same |
@@ -317,7 +317,7 @@ Planned controls are not evidence of compliance; verification status is in [veri
 
 ## 11. Risks and technical debt
 
-Production risks R-01 to R-22 live only in [verification-report-fixing.md section 5](verification-report-fixing.md#5-production-risk-register). Product-level debts: `ON-2019-10` adjudication and holdback rules and `ON-LEGACY` are not encoded; the interest rate source is unverified (`SRC-14`); no lawyer has reviewed anything yet.
+Production risks R-01 to R-22 live only in [verification-report-fixing.md section 5](verification-report-fixing.md#5-production-risk-register). Product-level debts: `ON-2019-10` adjudication and holdback rules and `ON-LEGACY` are not encoded; the interest rate source is unverified (`SRC-14`); no lawyer has reviewed anything yet (C2, 2026-11-11: none will for now; compliance/self-check.md replaces the lawyer gates, not legal advice).
 
 ## 12. Glossary
 

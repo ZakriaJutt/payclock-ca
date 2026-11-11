@@ -17,6 +17,7 @@ Canonical instructions for any agent or person working in this repository. Since
 |---|---|
 | What starts each clock, day counts, which clock is due (CLK-17), rule versions, lawyer-required points (L-01 to L-11), legal questions LQ-01 to LQ-03 | Decision.md sections 4 and 6 |
 | Label legend and source table | Decision.md sections 0 and 13 |
+| Legal and compliance answers (CASL, Law Society Act, liability, privacy), templates and wording rules; owner sign-off (C2) | compliance/self-check.md |
 | Requirements and metrics | PRD.md |
 | Screens and routes | App-flow.md |
 | Stack, APIs, jobs, threat model | TRD.md |
@@ -31,7 +32,7 @@ If two files disagree, the file in this table wins and the other is corrected in
 - Ontario only; the unpaid subcontractor's side only.
 - Dates and templates, not legal advice. PayClock never prepares or registers lien documents or a notice of adjudication, and never sends anything to a contractor, owner, court or registry.
 - Non-goals are listed in PRD.md section 10. Do not start one without a recorded decision (R-21).
-- No Phase 1-6 work before `T-0.3.4` records "build". No outreach before LQ-01 and no customer report before LQ-02 are answered in writing.
+- No Phase 1-6 work before `T-0.3.4` records "build". No outreach before LQ-01 and no customer report before LQ-02 are answered in writing. C2 (2026-11-11): both are answered by [compliance/self-check.md](compliance/self-check.md) sections 1 and 2, owner sign-off recorded (no lawyer; not legal advice); outreach follows its checklist and footers; no customer report until the Phase 0 model is chosen (Decision.md section 12 item 9). Never describe PayClock as lawyer-reviewed or as giving legal advice (self-check section 9).
 - Hand-run work follows controls HR-1 to HR-6 in execution-plan.md section 3.1; the Checker recomputes every date.
 
 ## 4. Architecture conventions
@@ -53,7 +54,7 @@ Before adding a helper, search `packages/platform` and `packages/rules`. Configu
 
 ### Utilities index (B1)
 
-All code lives under `workspace/` (npm workspace root); the repository root keeps only the ten documents, `.gitignore` and `Makefile`. Paths below are relative to `workspace/`.
+All code lives under `workspace/` (npm workspace root); the repository root keeps only the ten documents, `compliance/self-check.md` (C2), `.gitignore` and `Makefile`. Paths below are relative to `workspace/`.
 
 | Need | Use | Where |
 |---|---|---|
@@ -112,7 +113,7 @@ One linear, timestamped history. Expand, deploy, contract. Indexes on populated 
 
 ## 8. Tests
 
-- Any rule change needs golden cases checked against the lawyer-signed table (`UT-12`).
+- Any rule change needs golden cases checked against the lawyer-signed table (`UT-12`) (C2: the table signed by the Rules lead and the Checker, compliance/self-check.md section 4).
 - Any change to events, deadlines, reminders or actions needs the staleness tests (`IT-03` to `IT-08`).
 - Synthetic data only: Northline Electric Ltd., Baycrest Mechanical Inc., Harbourgate Builders Inc. No real firm, invoice or person in fixtures, logs or examples.
 
@@ -124,7 +125,8 @@ One linear, timestamped history. Expand, deploy, contract. Indexes on populated 
 | Screen or route | App-flow.md; design.md if its look or accessibility changes; the matrix |
 | Role or permission | PRD.md section 6; schema.md section 5; TRD.md section 8.2; `IT-01`, `IT-02` |
 | Table, index or constraint | schema.md (dictionary, index table, migrations note); TRD.md if an API changes |
-| Clock, day count, event, rule version | Decision.md section 4 first; then PRD acceptance criteria, unit tests, and a new lawyer sign-off |
+| Clock, day count, event, rule version | Decision.md section 4 first; then PRD acceptance criteria, unit tests, and a new lawyer sign-off (C2: a new two-person self-check sign-off) |
+| Legal or compliance rule (CASL, Law Society Act, liability, privacy) | compliance/self-check.md first; then Decision.md section 6 and 12, the gated tasks in execution-plan.md, and verification-report-fixing.md |
 | Price, funnel rate, cost, stop rule | Decision.md sections 7 to 10 together, with the arithmetic re-run |
 | Competitor fact | Decision.md section 3 and the source table, with the date consulted |
 | Operating assumption (hosting, provider, retention) | TRD.md; schema.md section 8; the risk register if a risk changes |

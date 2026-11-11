@@ -24,7 +24,8 @@ Invoice amounts, amounts in dispute, names of general contractors and owners, no
 - Do not show a rights date as final when a trigger is unknown; write "no later than".
 - Do not assert in a fixture, or output to a user, anything that depends on an open legal question (L-07, L-08, L-09, LQ-01 to LQ-03). Withhold it and show the flag.
 - Do not mark an invoice overdue or compute interest except from CLK-17 in state `computed`.
-- Do not send outreach or deliver a report before LQ-01 and LQ-02 are answered in writing.
+- Do not send outreach or deliver a report before LQ-01 and LQ-02 are answered in writing. C2 (2026-11-11): answered by [compliance/self-check.md](compliance/self-check.md), owner sign-off recorded; outreach only with its footer and checklist; no hand-run per-firm report until Decision.md section 12 item 9 is decided.
+- Do not call PayClock lawyer-reviewed, a law firm, or a source of legal advice; do not tell a customer what its facts mean in law (compliance/self-check.md sections 2 and 9).
 - Do not edit a deadline, an event or an approved rule version in place.
 - Do not compute dates, interest, access or applicability with a model, a spreadsheet formula pasted into the UI, or any code outside `packages/rules`.
 - Do not treat a lawyer flag as resolved, or a clock as fine, because nothing is due.
