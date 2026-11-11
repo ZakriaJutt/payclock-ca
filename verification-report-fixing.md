@@ -73,12 +73,12 @@ Impact is written for this product: a subcontractor relying on dates for money a
 
 | ID | Product impact | Prevention | Detection signal | Test and expected outcome | Task |
 |---|---|---|---|---|---|
-| R-01 | A delayed batch recompute or reminder job restores a lien date computed before a correction; the owner trusts the later date | In-transaction recompute; fact-version compare-and-set; one-current-deadline unique index; billing events deduplicated and state re-fetched | Nightly invariant job; discarded-run count | IT-05: stale result discarded, one current deadline; IT-15: late "payment failed" changes nothing. B1 2026-11-11: IT-05 passed (`packages/domain/test/isolation.test.ts`); unique current-deadline index in the migration | T-4.2.2 |
+| R-01 | A delayed batch recompute or reminder job restores a lien date computed before a correction; the owner trusts the later date | In-transaction recompute; fact-version compare-and-set; one-current-deadline unique index; billing events deduplicated and state re-fetched | Nightly invariant job; discarded-run count | IT-05: stale result discarded, one current deadline; IT-15: late "payment failed" changes nothing. B1 2026-11-11: IT-05 passed (`packages/domain/test/isolation.test.ts`); unique current-deadline index in the migration. Fix round 1: a rule-row or holiday change recomputes every stored deadline and no current deadline stays on a retired revision (`packages/domain/test/review-b1-round1.test.ts` B1-005) | T-4.2.2 |
 | R-02 | A reminder email is accepted by the provider after our timeout and shown as failed, so it is resent or the user is told nothing went out; or an import seems lost and is re-uploaded | Idempotency keys; reconcile sweep by `reminder.id`; "check status" | Reminders in `failed` later found `sent`; duplicate provider ids | IT-08, E2E-09: one email, truthful status | T-4.2.4 |
 | R-03 | A second day-counting helper in the web app disagrees with the rules package on holiday extension | All date arithmetic only in `packages/rules`; lint bans date maths elsewhere | Lint failures; golden diff | UT-13 plus lint fixture fails on a stray helper. B1 2026-11-11: UT-13 passed; lint fixture `packages/rules/test/boundaries.test.ts` passed (rules may not import, use a clock or floats) | T-2.1.1 |
 | R-04 | The web app imports rule internals and bypasses version selection | Entry-point-only imports enforced | Lint | Lint fixture with a deep import fails. B1 2026-11-11: deep-import lint fixture passed (`packages/rules/test/boundaries.test.ts`) | T-2.1.1 |
 | R-05 | Another subcontractor sees a firm's disputed invoices and counterparties through an API, job, export or file link | Three-layer tenancy (TRD 8.2); tenant in job payload and storage key | Row-level-security denials; cross-tenant test in CI | IT-01: 404 everywhere, job refuses. B1 2026-11-11: IT-01 API, use-case and job parts passed (`apps/web/test/api.test.ts`, `packages/domain/test/isolation.test.ts`, `apps/worker/test/worker.test.ts`); export and file link not built | T-2.2.1 |
-| R-06 | Worker uses a copied holiday list or config and sends reminders on different dates from the screen | One config and one holiday source in shared packages | Config hash logged by both processes at start | IT-14 compares hashes; IT-12 | T-2.1.5 |
+| R-06 | Worker uses a copied holiday list or config and sends reminders on different dates from the screen | One config and one holiday source in shared packages | Config hash logged by both processes at start | IT-14 compares hashes; IT-12. Fix round 1: both processes read the one `holiday` table and its `holiday_coverage` through `loadRules`; config hash logging still not built | T-2.1.5 |
 | R-07 | Worker crashes at start because the logger pulls a web-only module; reminders stop silently | Platform package has no web imports; worker start in CI | Readiness check; queue age alert | IT-14: worker healthy alone. B1 2026-11-11: IT-14 worker-alone part passed (`apps/worker/test/worker.test.ts`) | T-2.1.5 |
 | R-08 | The one-current-deadline index exists in a migration but not in the ORM and is dropped by a later generated migration, allowing two "current" lien dates | Parity check in CI | `scripts/orm-parity` diff | IT-10: empty diff. B1 2026-11-11: IT-10 parity part passed, empty diff (`packages/db/test/migrations.test.ts`, `scripts/orm-parity.ts`) | T-2.2.3 |
 | R-09 | A backfill of `act_by_date` stops halfway; some invoices show no act-by date | Resumable batches with checkpoints; engine tolerates null by recomputing | Checkpoint lag; invariant job | IT-10: interrupted backfill completes on resume | T-2.2.3 |
@@ -181,9 +181,9 @@ Reserved for the independent reviewer. IDs `F-001` onward. Authors record fixes;
 | 8 | Development estimate 2.7-4.0 times the brief's | Cash requirement | Founder | Decision before Phase 1 |
 | 9 | Location of the founder's VPS unknown | AD-09 host choice | Founder | `T-2.1.4` |
 | 10 | Tagged-PDF accessibility of templates undecided ("not met") | WCAG coverage of exports | Engineer | `T-4.3.3` |
-| 19 | Holiday table: observed-day substitutions of Legislation Act s. 88 (a listed day on a weekend) are not encoded, and the s. 88(2) list was not re-opened on 2026-11-11 (e-Laws page is script-rendered). Missing a substitute holiday shows a payment due date one day early (the conservative side for counterparty duties); rights clocks are never extended | Customer use of any date near a weekend holiday | Rules lead | Text of s. 88 read and the holiday rows re-verified |
+| 19 | Holiday table. Corrected in B1 fix round 1 (2026-11-11, not yet re-reviewed): the earlier text here called an early payment date "the conservative side"; that was wrong (Decision.md 4.3 now states the harm of each direction). Civic Holiday, which s. 88(2) does not list, was in the table (B1-001); the s. 88(3)-(5) observed days were missing (B1-002); dates outside 2025-2028 were computed against an empty table (B1-003). Now the rows follow s. 88 exactly (re-read on e-Laws 2026-11-11), cover 2018-2040, and any other year is not computable. Remaining: days proclaimed under s. 88(2) para. 12 are added by the operator (`changeProclaimedHoliday`) and no one watches for proclamations yet | Customer use of a date near a proclaimed day | Rules lead | A proclamation check is part of the monthly rule review (M-06) |
 | 20 | `UT-12` needs the Phase 0 lawyer-checked invoices; only the 15 synthetic catalogue cases exist | Gate "all pilot invoices reproduce" | Rules lead | `T-0.1.3`, `T-3.1.7` |
-| 21 | L-06 "near" a transition date is not defined (no window), so it is raised only when EV-11 or EV-12 is unknown or the premises facts are unknown in the 2018 lease window | Applicability flags near 2018-07-01, 2018-12-06, 2019-10-01 | Rules lead, Lawyer | A window is decided and added to Decision 4.4 |
+| 21 | L-06 "near" a transition date: since B1 fix round 1 an estimated EV-11 or EV-12 within 365 days of a transition date leaves the regime undecided (B1-004). The 365-day reach is the author's proposal `[P]` (Decision.md 4.4); a confirmed date near a boundary is still not flagged | Applicability flags near 2018-07-01, 2018-12-06, 2019-10-01 | Rules lead, Lawyer | The lawyer confirms or replaces the reach under L-06 |
 
 ## 9. Build milestone B1 (2026-11-11)
 
@@ -205,6 +205,8 @@ On 2026-11-11 the owner authorised implementation in this repository before the 
 | T-4.2.2 | In-transaction recompute under a project lock; fact-version compare-and-set `recompute.batch`; invariant check | Scheduled invariant job |
 | T-4.2.3 | `GET /recomputations/{id}` diff (rights clocks moved earlier first); superseded reminders cancelled; urgent reminder row when a rights act-by date moves earlier to within 14 days | S-09 screen; stale actions and L-10 (actions not built) |
 
+Fix round 1 (2026-11-11) changed T-3.1.1, T-3.1.2, T-3.1.5, T-2.2.1 and T-4.2.2; see section 9.6.
+
 Blocked or not started, with reason: T-2.1.3 (CI: no pipeline run in B1; the lead pushes); T-2.1.4 (hosting and database accounts); T-2.2.2 (Supabase Auth account; a fake provider behind an interface is used and refused outside local/test); T-2.2.4 (storage provider); T-4.1.2 and all of M4.3 (out of B1 scope); every Phase 0 and Phase 1 task (go-to-market and lawyer work; L-01 sign-off absent, so every rule version is `draft` and every result carries flag L-01).
 
 ### 9.2 Commands and results (clean test database)
@@ -215,10 +217,11 @@ Run on 2026-11-11 from `workspace/` after `npx tsx scripts/db-reset-test.ts` (dr
 |---|---|
 | `npm run lint` | 0 problems |
 | `npm run typecheck` | 0 errors |
-| `npm run test:unit` | 8 files, 65 tests passed |
-| `npm run test:integration` | 5 files, 37 tests passed |
+| `npm run test:unit` | 9 files, 83 tests passed (after fix round 1; 8 files, 65 before) |
+| `npm run test:integration` | 6 files, 43 tests passed (after fix round 1; 5 files, 37 before) |
 | `npm run golden-verify` | 15/15 catalogue cases equal |
-| `npx tsx scripts/orm-parity.ts --test` | 0 differences |
+| `npx tsx scripts/orm-parity.ts --test` | 0 differences (2 migrations) |
+| Reviewer scripts `_coordination/review/payclock-ca-b1-*` (run, not edited) | Before fix round 1: engine 23/34, integration 23/25, extra X-1 and X-2 deviating. After: engine 34/34, integration 25/25, X-1 regime undecided with `L-06` and `REGIME_ESTIMATED`, X-2 new revision plus a recompute run |
 | `npx tsx scripts/dev.ts --check` | "ready" with `{"database":true,"queue":true}`; with an unreachable database: "NOT READY: database unhealthy", non-zero |
 | `npm audit --omit=dev` | 0 vulnerabilities after upgrading drizzle-orm to 0.45.4 and zod to 4.6.7; dev-only advisories remain in the test runner's dependencies (tinypool via vitest 3.2.4) |
 
@@ -261,3 +264,22 @@ Run on 2026-11-11 from `workspace/` after `npx tsx scripts/db-reset-test.ts` (dr
 - A Form 8 publication dated before EV-17 is inconsistent; the engine uses the earlier date with L-11.
 - Rule versions `ON-2019-10` (lien, adjudication, holdback) and `ON-LEGACY` compute nothing ("not computed; lawyer required"); `ON-NOPP` computes lien clocks only.
 - Redis database 3 was assigned but is not used: the TRD keeps the queue in Postgres (AD-05). The API runs on `node:http` for B1; a Next.js route handler can wrap it (AD-01 unchanged).
+- Holiday table years: 2018-2040 (`HOLIDAY_YEARS`); `ON-NOPP` lien clocks can start in 2018, and 2040 leaves margin for CLK-10 counts. Extending the range is a data change through `npm run rules:sync`, which recomputes.
+
+### 9.6 Fix round 1 (2026-11-11), findings of `_coordination/review/payclock-ca-b1-round1.md`
+
+Legislation Act, 2006 ss. 88-89 re-read on e-Laws (built-in browser, rendered page) on 2026-11-11 by the author. Every fix below is the author's; none has been re-reviewed.
+
+| Finding | Status | Fix | Permanent regression test |
+|---|---|---|---|
+| B1-001 (major) | Fixed | Civic Holiday removed; `rules:sync` deletes generated rows no longer produced | `packages/rules/test/review-b1-round1.test.ts` B1-001: 2026-08-03 not a holiday; August due date CLK-17 2026-08-03, CLK-16 2026-08-04; CLK-05(b) 2026-08-03 and a Form 1.2 given 2026-08-04 is path F with L-05 (given 2026-08-03 stays path D). Database row check in `packages/domain/test/review-b1-round1.test.ts` |
+| B1-002 (major) | Fixed | s. 88(3)-(5) observed days generated; direction of each one-day error stated in Decision.md 4.3 and item 19 | B1-002: 2027-12-27, 2022-12-27, 2023-01-02, 2029-07-02 present, 2028-01-03 absent; CLK-17 2027-12-28; CLK-09b 2027-12-27 with the L-09 withheld note |
+| B1-003 (major) | Fixed | `holiday_coverage` table; the engine fails closed (`not_computable`, missing `holiday_table:YYYY`) for any count, extension or within-time test in an uncovered year; coverage loaded for 2018-2040 | B1-003: 2024 and 2029 cases not computable with a 2025-2028 table and correct (2024-07-02, 2029-05-22) when covered; rights clocks and CLK-10 fail closed; empty table computes nothing |
+| B1-004 (major) | Fixed | Estimated EV-11/EV-12 within 365 days of a boundary leaves the regime undecided (L-06); otherwise `REGIME_ESTIMATED` and the ids on every result | B1-004: reviewer X-1 and R-07c cases undecided; far estimate computed and marked on every result; estimate whose reach cannot change ON-NOPP stays ON-NOPP, marked |
+| B1-005 (major) | Fixed | Migration `20261111T200000`: `rule_version.revision`, `content_sha256`, one live revision per code; `syncDraftRules` retires a changed version and inserts a new draft revision, rewrites the holiday table, audits, and recomputes every project (`recompute.batch` logic, compare-and-set, retried); a deadline on a retired revision is never "unchanged"; invariant check reports one | `packages/domain/test/review-b1-round1.test.ts` B1-005: proclaimed holiday added moves CLK-17 2026-08-03 to 2026-08-04 (diff cause `holiday_table`, audit rows) and back on removal; rule row changed moves CLK-09b 2026-11-29 to 2026-11-28 with revision r2, r1 retired, invariant clean; restoring gives r3; unchanged sync recomputes nothing; invariant flags a deadline on a retired revision |
+| B1-006 (minor) | Fixed (claim now true) | L-01 added to every result while any rule version used is unsigned, including `not_applicable` and applicability-unknown results | B1-006: EV-12 unknown and ON-NOPP cases, every result has L-01 |
+| B1-007 (minor) | Fixed | Ids validated as UUIDs in use cases and path parameters: 422 | `apps/web/test/api.test.ts` B1-007 (POST event and GET invoice); domain B1-007 |
+| B1-008 (minor) | Fixed | Fake auth refused unless `API_BIND_HOST`, the database host and `APP_PUBLIC_URL` are all loopback (the API binds to `API_BIND_HOST`) | `packages/platform/test/platform.test.ts` B1-008 |
+| B1-009 (minor) | Fixed | Anniversary per Legislation Act s. 89(7) | B1-009: EV-11 2028-02-29 gives Form 6 by 2029-03-14 with the s. 89(7) note |
+
+The existing `payclock_dev` database was upgraded by `make dev-check`: new revisions r2 for all four versions, four Civic Holiday rows (2025-2028) removed, the seeded project recomputed.

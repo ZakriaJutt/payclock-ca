@@ -61,7 +61,7 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | Holiday test and extension; holiday rows for seeding | `isHoliday`, `extendPastHolidays`, `ontarioHolidayRows` | `packages/rules/src/holidays.ts` |
 | All clock dates for one subcontract | `compute(input)` | `packages/rules/src/engine.ts` |
 | Transition regime | `selectRegime` | `packages/rules/src/regime.ts` |
-| Rule versions as data | `RULE_VERSIONS` (seeded as `draft` by `syncDraftRules`) | `packages/rules/src/versions.ts`, `packages/domain/src/rules-sync.ts` |
+| Rule versions as data; holiday changes | `RULE_VERSIONS` (loaded as `draft` revisions by `syncDraftRules`, which recomputes on any change); `changeProclaimedHoliday` | `packages/rules/src/versions.ts`, `packages/domain/src/rules-sync.ts` |
 | Overdue; interest arithmetic and the withheld statement | `overdueStatus`, `simpleInterestCents`, `interestStatement` | `packages/rules/src/overdue.ts`, `interest.ts` |
 | Hash, canonical JSON (pure) | `sha256Hex`, `canonicalJson` | `packages/rules/src/sha256.ts` |
 | Golden cases | `runGolden` | `packages/rules/golden/run.ts` |
@@ -85,6 +85,7 @@ All code lives under `workspace/` (npm workspace root); the repository root keep
 | `make test-unit`, `make test-integration` | Vitest; integration drops and re-migrates `payclock_test` first |
 | `make golden`, `make parity` | `scripts/golden-verify.ts`; `scripts/orm-parity.ts --test` |
 | `npm run db:migrate`, `npm run db:migrate-test`, `npm run seed` | Migrations plus queue schema; synthetic seed (refuses outside local/test) |
+| `npm run rules:sync [-- --test]` | New draft revision for any changed rule version, holiday table per s. 88 for 2018-2040, recompute of every stored deadline |
 
 Still proposed: Docker Compose, CI, staging, `scripts/backfill-runner`, `scripts/link-check`, `scripts/restore-drill`.
 

@@ -69,8 +69,8 @@ Rules: apps import only package entry points; `packages/rules` imports nothing b
 
 - Input: rule version rows (`rule_clock`), a set of current events for one scope, a holiday calendar, an interest-rate table. Output: one result per applicable clock: `state` (`computed`, `provisional`, `not_computable`, `not_applicable`), `statutory_date`, `act_by_date`, `missing_facts[]`, `flags[]`, `rule_clock_id`, `inputs_hash`.
 - Date type: civil date in America/Toronto. No timestamps, no time zones, no floating point (`AD-11`).
-- `addDays(trigger, n)`: trigger day excluded; result extended past holidays (Sunday and Legislation Act s. 88(2) days; not Saturday) when the clock's `extend_on_holiday` is true.
-- Version selection ([Decision.md 4.4](Decision.md#44-rule-versions-and-transition)): by each clock's governing date; unknown EV-11 or EV-12 gives `not_computable` with flag L-06, never a default.
+- `addDays(trigger, n)`: trigger day excluded; result extended past holidays (Sunday and the Legislation Act s. 88(2)-(5) days; not Saturday, not Civic Holiday) when the clock's `extend_on_holiday` is true. The engine receives the holiday rows and the years they cover (`holiday_coverage`); a count or extension reaching an uncovered year returns `not_computable` with missing fact `holiday_table:YYYY`.
+- Version selection ([Decision.md 4.4](Decision.md#44-rule-versions-and-transition)): by each clock's governing date; unknown EV-11 or EV-12 gives `not_computable` with flag L-06, never a default; an estimated EV-11 or EV-12 within 365 days of a transition date likewise; any other estimated selecting fact adds `REGIME_ESTIMATED` and its event ids to every result. Every result carries L-01 while any rule version used is unsigned.
 - Independence: each base clock (CLK-01 to CLK-16) is evaluated on its own inputs. A missing fact or a flag on one clock cannot suppress or pass another.
 - Composition: CLK-17 (governing due date), overdue and CLK-16 are derived afterwards from CLK-03, CLK-04, CLK-05 and EV-05 by the fixed path table A to H in [Decision.md 4.2.1](Decision.md#421-which-clock-is-due-clk-17-overdue-and-interest), per amount. The derivation is the only place where one clock affects another.
 - Event types are never substituted: CLK-11 reads EV-17 and cannot read EV-18; CLK-09's termination input is EV-18 only when it is within 7 days after EV-17, otherwise EV-17 with L-11. Ceiling rule: when EV-17 is unknown and EV-18 is known, EV-18 enters only as an upper limit on EV-17, so the result is the earliest of (EV-18 + count) and the other known triggers, always `bound = no_later_than`, state `provisional`, missing fact EV-17, never `exact` ([Decision.md 4.2.2](Decision.md#422-lien-preservation-clk-09-two-liens-and-termination)). The trigger specification names event types explicitly; there is no generic "termination" input.
@@ -221,7 +221,7 @@ Queue: pg-boss in the same Postgres (`AD-05`).
 | `digest.weekly` | Cron per workspace | 60 s | 3 | workspace + ISO week; writes a `digest_send` row | Alert; row `failed` |
 | `billing.sync` | Verified webhook event | 30 s | 5 | provider event id (`billing_event` unique) | Alert; state re-fetched by nightly sweep |
 | `import.process` | Upload | 5 min | 3, resumes from last committed row | batch + row number | Batch `partial`, rows listed |
-| `recompute.batch` | Rule version approval; holiday table change | 10 min | 3, per scope | scope + rule version + fact_version | Alert; scopes listed |
+| `recompute.batch` | Rule version approval or new revision; holiday table change (B1: `npm run rules:sync` and `changeProclaimedHoliday` run it for every project at once, with a `computation_run` and audit row each) | 10 min | 3, per scope | scope + rule version + fact_version | Alert; scopes listed |
 | `invariant.check` | Nightly | 5 min | 1 | date | Page founder |
 | `reconcile.sweep` | Every 10 min | 2 min | 1 | n/a | Alert |
 | `retention.sweep` | Nightly | 10 min | 3 | date | Alert |

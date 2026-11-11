@@ -32,6 +32,7 @@ erDiagram
   tenant ||--o{ digest_send : emails
   tenant ||--o{ billing_event : bills
   tenant ||--o{ api_idempotency : replays
+  holiday }o--|| holiday_coverage : covered_by
   rule_clock }o--o{ holiday : extends_past
   rule_clock }o--o{ interest_rate : reads
 ```
@@ -75,9 +76,10 @@ erDiagram
 | Table | Fields | Sens. |
 |---|---|---|
 | `legal_signoff` | `reviewer_name text`; `licence_jurisdiction text`; `memo_sha256 bytea`; `signed_on date`; `scope_note text` | I |
-| `rule_version` | `code text unique` (for example `ON-2026-01`); `family text` (`ON-LEGACY`, `ON-NOPP`, `POST-2019`: the regime the version belongs to); `jurisdiction text default 'ON'`; `effective_from date`; `effective_to date null`; `status` enum(draft, approved, retired) default draft; `legal_source text`; `signoff_id uuid null`; check: approved implies `signoff_id` not null; rows immutable once approved (trigger) | I |
+| `rule_version` | `code text` (for example `ON-2026-01`); `revision int default 1`, unique(`code`,`revision`), at most one non-retired revision per code (partial unique index): a changed version is a new revision and the old one is retired, never edited; `content_sha256 text` of the encoded content; `family text` (`ON-LEGACY`, `ON-NOPP`, `POST-2019`: the regime the version belongs to); `jurisdiction text default 'ON'`; `effective_from date`; `effective_to date null`; `status` enum(draft, approved, retired) default draft; `legal_source text`; `signoff_id uuid null`; check: approved implies `signoff_id` not null; rows immutable once approved (trigger) | I |
 | `rule_clock` | `rule_version_id` fk; `clock_code text` (`CLK-01`..`CLK-17`); `variant text default ''` (`a`, `b` for CLK-09); `trigger_spec jsonb` naming event types explicitly (for example CLK-11: `{"earliest_of":["EV-09","EV-17","EV-10","EV-07"],"ceiling_if_unknown":{"EV-17":"EV-18"}}`, where a ceiling can only produce `bound = no_later_than`; CLK-09b: `{"earliest_of":["EV-07","EV-09",{"termination_for_lien":{"actual":"EV-17","published":"EV-18","in_time_days":7}},"EV-10"]}`); `pending_question text null` (for example `L-09`: dependent output withheld); `offset_days int`; `window_end_days int null`; `extend_on_holiday bool`; `act_by_buffer_days int default 0`; `section_ref text`; `applies_when jsonb`; `computed bool default true`; `not_computed_reason text null`; unique(`rule_version_id`,`clock_code`,`variant`) | I |
 | `holiday` | pk(`jurisdiction`,`day date`); `name text`; `source text` | I |
+| `holiday_coverage` | pk(`jurisdiction`,`year int`); `source text`. Years the holiday table is complete for; the engine computes no date that needs another year (B1: 2018-2040) | I |
 | `interest_rate` | `jurisdiction`; `effective_from date`; `effective_to date null`; `annual_rate numeric(6,4)` (decimal fraction, e.g. 0.0400); `source text`; no overlapping ranges, enforced by a trigger because `btree_gist` is not available | I |
 
 ### Computation
@@ -141,7 +143,7 @@ Not in B1 (still proposed): `support_grant`, `source_document`, `holdback_entry`
 | `audit_event` | read | none | read | read (rule actions) | insert | insert |
 
 - Database roles: `app_tenant` (locally `payclock_app`, NOSUPERUSER NOBYPASSRLS, created by `scripts/db-bootstrap.ts`; row-level security enabled and forced on every tenant table; policy `tenant_id = current_setting('app.tenant_id')::uuid`), `app_rules_admin` (rule tables only), `app_migrator` (schema changes only, not used at runtime). No runtime role bypasses row-level security.
-- Uniqueness is scoped per tenant except `app_user.email`, `rule_version.code`, `source_document.storage_key`.
+- Uniqueness is scoped per tenant except `app_user.email`, `rule_version` (`code`, `revision`), `source_document.storage_key`.
 - Cross-tenant denial: a query without the tenant setting returns no rows and writes fail; APIs answer 404; storage keys start `t/{tenant_id}/` and links are issued only after a row-level read succeeds.
 
 ## 6. Provenance, versions, timestamps
