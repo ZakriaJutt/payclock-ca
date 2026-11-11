@@ -1,5 +1,5 @@
 import { addDays, civil, minDate, type CivilDate } from './civil-date.ts';
-import { extendPastHolidays, isHoliday } from './holidays.ts';
+import { extendPastHolidaysCovered, HolidayCoverageError, isHolidayCovered } from './holidays.ts';
 import { selectRegime, type FactStatus, type RegimeResult } from './regime.ts';
 import { canonicalJson, sha256Hex } from './sha256.ts';
 import type {
@@ -46,11 +46,31 @@ interface TriggerOutcome {
 
 class Engine {
   private readonly holidays: Set<string>;
+  private readonly covered: Set<number>;
+  private readonly uncovered = new WeakMap<ClockResult, number[]>();
+  private readonly allApproved: boolean;
   private readonly results: ClockResult[] = [];
   private regime!: RegimeResult;
 
   constructor(private readonly input: ComputeInput) {
     this.holidays = new Set(input.holidays);
+    this.covered = new Set(input.holidayYears ?? input.holidays.map((d) => Number(d.slice(0, 4))));
+    this.allApproved = input.ruleVersions.length > 0 && input.ruleVersions.every((v) => v.status === 'approved');
+  }
+
+  /** Record that a count or extension for `r` needed a year the holiday table does not cover. */
+  private markUncovered(r: ClockResult, year: number): void {
+    this.uncovered.set(r, [...(this.uncovered.get(r) ?? []), year]);
+  }
+
+  /** Holiday-extended day, or null when the holiday table does not cover the days involved. */
+  private extendOrNull(d: CivilDate): CivilDate | null {
+    try {
+      return extendPastHolidaysCovered(d, this.holidays, this.covered);
+    } catch (e) {
+      if (e instanceof HolidayCoverageError) return null;
+      throw e;
+    }
   }
 
   // ---------- facts ----------
@@ -118,11 +138,16 @@ class Engine {
   /** Count from a trigger day with the row's offset and its holiday rule. */
   private count(r: ClockResult, rowDef: RuleClock, trigger: CivilDate, offset = rowDef.offsetDays): CivilDate {
     const raw = addDays(trigger, offset);
-    if (rowDef.extendOnHoliday) return extendPastHolidays(raw, this.holidays);
-    if (rowDef.pendingQuestion && isHoliday(raw, this.holidays)) {
-      // Rights clocks: the extended day depends on L-09 and is never output.
-      r.withheld.push({ output: 'extended_date', question: rowDef.pendingQuestion });
-      r.notes.push(`Last day falls on a holiday; may be one day later; ask your lawyer (${rowDef.pendingQuestion})`);
+    try {
+      if (rowDef.extendOnHoliday) return extendPastHolidaysCovered(raw, this.holidays, this.covered);
+      if (rowDef.pendingQuestion && isHolidayCovered(raw, this.holidays, this.covered)) {
+        // Rights clocks: the extended day depends on L-09 and is never output.
+        r.withheld.push({ output: 'extended_date', question: rowDef.pendingQuestion });
+        r.notes.push(`Last day falls on a holiday; may be one day later; ask your lawyer (${rowDef.pendingQuestion})`);
+      }
+    } catch (e) {
+      if (!(e instanceof HolidayCoverageError)) throw e;
+      this.markUncovered(r, e.year);
     }
     return raw;
   }
@@ -138,6 +163,22 @@ class Engine {
   }
 
   private push(r: ClockResult): ClockResult {
+    const years = this.uncovered.get(r);
+    if (years) {
+      // Fail closed (B1-003): never present a day counted against an incomplete holiday table.
+      r.state = 'not_computable';
+      r.missingFacts = [...r.missingFacts, ...uniq(years).map((y) => `holiday_table:${y}`)];
+      r.notes.push(`Holiday table does not cover ${uniq(years).join(', ')}: not computed`);
+    }
+    // L-01 travels with every result while any rule version used is unsigned (B1-006), including
+    // "not applicable" and "applicability unknown" answers, which rest on the same draft rules.
+    if (!this.allApproved) r.flags.push('L-01');
+    // An estimated prime-contract or procurement date that selected the regime travels with
+    // every result it decided (B1-004).
+    if (this.regime && this.regime.estimatedEventIds.length > 0) {
+      r.flags.push('REGIME_ESTIMATED');
+      r.estimatedEventIds.push(...this.regime.estimatedEventIds);
+    }
     r.flags = uniq(r.flags).sort();
     r.missingFacts = uniq(r.missingFacts);
     r.triggerEventIds = uniq(r.triggerEventIds).sort();
@@ -396,19 +437,15 @@ class Engine {
           form6.state = 'not_computable';
           form6.flags.push('L-07');
           form6.notes.push('Contract entered into before 2026-01-01: s. 87.4(4) has two readings; no date until the lawyer chooses (L-07)');
-        } else if (ev11.date.endsWith('-02-29')) {
-          form6.state = 'not_computable';
-          form6.flags.push('L-07');
-          form6.notes.push('Contract dated 29 February: the anniversary in other years is not defined in the encoded rule');
         } else {
-          const [y, rest] = [Number(ev11.date.slice(0, 4)), ev11.date.slice(4)];
-          const anniversary = civil(`${(y + 1).toString().padStart(4, '0')}${rest}`);
+          const anniversary = firstAnniversary(ev11.date);
           form6.statutoryDate = this.count(form6, rowDef, anniversary);
           form6.actByDate = form6.statutoryDate;
           form6.state = 'computed';
           form6.triggerEventIds = [ev11.id];
           if (ev11.estimated) form6.estimatedEventIds = [ev11.id];
           form6.notes.push('First contract anniversary; later anniversaries follow the same count');
+          if (ev11.date.endsWith('-02-29')) form6.notes.push('Contract dated 29 February: anniversary on 28 February except in a leap year (Legislation Act s. 89(7))');
         }
       }
     }
@@ -526,13 +563,15 @@ class Engine {
     // Within time: on or before the CLK-01 date; EV-01 stands in when EV-02 is unknown (provisional).
     let clk01Date: CivilDate | null = null;
     let clk01Proxy = false;
+    let clk01Uncovered: number | null = null;
     {
       const basis = ev02.status === 'known' ? ev02 : ev01.status === 'known' ? ev01 : null;
       if (basis && basis.status === 'known') {
         const version = this.versionFor(basis.date);
         const rowDef = this.row(version, 'CLK-01', '');
         if (rowDef?.computed) {
-          clk01Date = extendPastHolidays(addDays(basis.date, rowDef.offsetDays), this.holidays);
+          clk01Date = this.extendOrNull(addDays(basis.date, rowDef.offsetDays));
+          if (clk01Date === null) clk01Uncovered = Number(addDays(basis.date, rowDef.offsetDays).slice(0, 4));
           clk01Proxy = ev02.status !== 'known';
         }
       }
@@ -646,7 +685,7 @@ class Engine {
       }
     }
 
-    this.dueDate(inv, ev01, ev02, clk01Date, clk01Proxy, notices, timeliness, payments);
+    this.dueDate(inv, ev01, ev02, clk01Date, clk01Proxy, notices, timeliness, payments, clk01Uncovered);
   }
 
   /** CLK-17 by the path table A to H (Decision.md 4.2.1), per amount; then CLK-16. */
@@ -659,6 +698,7 @@ class Engine {
     notices: EventFact[],
     timeliness: (n: EventFact) => 'in' | 'late' | 'unknown',
     payments: EventFact[],
+    clk01Uncovered: number | null,
   ): void {
     interface Portion {
       key: string;
@@ -793,6 +833,8 @@ class Engine {
         r.notes.push('An owner payment with an unknown date is recorded');
       }
       if (r.statutoryDate) r.actByDate = r.statutoryDate;
+      // The within-time test needed a year the holiday table does not cover: the path is unknown.
+      if (clk01Uncovered !== null && knownPayments.length > 0) this.markUncovered(r, clk01Uncovered);
       const due = this.push(r);
       this.interestStart(due, inv.id);
     }
@@ -866,7 +908,7 @@ class Engine {
         r.ruleVersionCode = legacyVersion.code;
         if (legacyVersion.status !== 'approved') r.flags.push('L-01');
       }
-      r.notes.push(legacy ? `${regime.reason}: not computed; lawyer required (L-06)` : `Applicability unknown (${regime.reason}); lawyer required (L-06)`);
+      r.notes.push(legacy ? `${regime.reason}: not computed; lawyer required (L-06)` : `${regime.reason[0]!.toUpperCase()}${regime.reason.slice(1)}; lawyer required (L-06)`);
       if (RIGHTS_CLOCKS.has(code)) r.flags.push('L-04');
       this.push(r);
     };
@@ -875,6 +917,15 @@ class Engine {
     }
     for (const inv of this.input.invoices) for (const code of PAYMENT_CLOCKS) mk(code, '', inv.id);
   }
+}
+
+/** Legislation Act s. 89(7): the anniversary of 29 February falls on 28 February except in a leap year. */
+export function firstAnniversary(d: CivilDate): CivilDate {
+  const y = Number(d.slice(0, 4)) + 1;
+  const rest = d.slice(4);
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const md = rest === '-02-29' && !leap ? '-02-28' : rest;
+  return civil(`${y.toString().padStart(4, '0')}${md}`);
 }
 
 function toStatus(ev: EventFact | undefined): FactStatus {
@@ -908,6 +959,7 @@ export function inputsHash(input: ComputeInput): string {
       events,
       versions,
       holidays: [...input.holidays].sort(),
+      holidayYears: [...(input.holidayYears ?? [])].sort((x, y) => x - y),
     }),
   );
 }

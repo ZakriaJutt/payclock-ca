@@ -6,7 +6,8 @@ import {
   type ClockCode, type ClockResult, type ComputeInput, type ComputeOutput, type EventFact, type EventType,
 } from '../src/index.ts';
 
-export const HOLIDAYS = [2025, 2026, 2027, 2028].flatMap((y) => ontarioHolidayRows(y)).map((h) => h.day);
+export const HOLIDAY_YEARS = Array.from({ length: 23 }, (_, i) => 2018 + i); // 2018-2040, as seeded
+export const HOLIDAYS = HOLIDAY_YEARS.flatMap((y) => ontarioHolidayRows(y)).map((h) => h.day);
 export const INV = 'inv-1042';
 
 let seq = 0;
@@ -40,6 +41,7 @@ export function input(events: EventFact[], over: Partial<ComputeInput> = {}): Co
     events,
     ruleVersions: RULE_VERSIONS,
     holidays: HOLIDAYS,
+    holidayYears: HOLIDAY_YEARS,
     ...over,
   };
 }

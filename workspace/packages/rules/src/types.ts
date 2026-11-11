@@ -142,11 +142,14 @@ export interface ComputeInput {
   ruleVersions: RuleVersion[];
   /** Holiday table rows for ON (days only); Sundays are always holidays. */
   holidays: readonly CivilDate[];
+  /** Years the holiday table covers. A count or extension landing outside them is not computed
+   * (B1-003). When omitted, the years that have at least one holiday row are taken as covered. */
+  holidayYears?: readonly number[];
 }
 
 export interface ComputeOutput {
   engineVersion: string;
-  regime: { family: RegimeFamily | null; missingFacts: string[]; flags: string[]; reason: string };
+  regime: { family: RegimeFamily | null; missingFacts: string[]; flags: string[]; reason: string; estimatedEventIds: string[] };
   inputsHash: string;
   results: ClockResult[];
 }

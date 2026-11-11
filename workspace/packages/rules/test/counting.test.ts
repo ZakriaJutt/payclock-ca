@@ -46,9 +46,9 @@ describe('T-3.1.1 civil dates and holidays', () => {
   it('holiday rows for 2026 and 2027 carry the fixture holidays and a source', () => {
     const r26 = ontarioHolidayRows(2026);
     const r27 = ontarioHolidayRows(2027);
-    expect(r26.find((h) => h.name === 'Remembrance Day')?.day).toBe('2026-11-11');
-    expect(r27.find((h) => h.name === 'Family Day')?.day).toBe('2027-02-15');
-    expect(r26.find((h) => h.name === 'Good Friday')?.day).toBe('2026-04-03');
-    expect(r26.every((h) => h.source.includes('s. 88(2)'))).toBe(true);
+    expect(r26.find((h) => h.name.startsWith('Remembrance Day'))?.day).toBe('2026-11-11');
+    expect(r27.find((h) => h.name.startsWith('Family Day'))?.day).toBe('2027-02-15');
+    expect(r26.find((h) => h.name.startsWith('Good Friday'))?.day).toBe('2026-04-03');
+    expect(r26.every((h) => h.source.includes('s. 88(2)-(5)'))).toBe(true);
   });
 });

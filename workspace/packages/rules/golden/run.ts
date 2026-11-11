@@ -6,7 +6,8 @@ interface GoldenExpect { clock: string; variant?: string; date?: string; act_by?
 interface GoldenCase { id: string; events: GoldenEvent[]; expect: GoldenExpect[] }
 export interface GoldenFile { source: string; base_events: GoldenEvent[]; cases: GoldenCase[] }
 
-const HOL = [2025, 2026, 2027, 2028].flatMap((y) => ontarioHolidayRows(y)).map((h) => h.day);
+const YEARS = Array.from({ length: 23 }, (_, i) => 2018 + i);
+const HOL = YEARS.flatMap((y) => ontarioHolidayRows(y)).map((h) => h.day);
 
 export function runGolden(file: GoldenFile): { passed: number; failures: string[] } {
   const failures: string[] = [];
@@ -30,6 +31,7 @@ export function runGolden(file: GoldenFile): { passed: number; failures: string[
       events,
       ruleVersions: RULE_VERSIONS,
       holidays: HOL,
+      holidayYears: YEARS,
     });
     const diffs: string[] = [];
     for (const x of c.expect) {

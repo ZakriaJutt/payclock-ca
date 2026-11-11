@@ -1,12 +1,17 @@
 import { addDays, dayOfWeek, makeDate, type CivilDate } from './civil-date.ts';
 
 /**
- * Holidays for counting under the Legislation Act, 2006 s. 88(2) [S: SRC-04]: Sunday plus the
- * listed days. Saturday is not a holiday. The engine never derives holidays itself: it receives
- * the holiday table (data rows with a source). `ontarioHolidayRows` only generates candidate rows
- * for seeding that table; observed-day substitutions (a listed day falling on a weekend) are NOT
- * generated because their text was not re-read on 2026-11-11 (gap recorded in the
- * verification report).
+ * Holidays for counting under the Legislation Act, 2006 s. 88 [S: SRC-04], text read on e-Laws on
+ * 2026-11-11: s. 88(2) Sunday, New Year's Day, Family Day, Good Friday, Easter Monday, Victoria Day,
+ * Canada Day, Labour Day, Thanksgiving Day, Remembrance Day, Christmas Day, Boxing Day, and any
+ * day proclaimed by the Governor General or Lieutenant Governor; s. 88(3) New Year's Day on a
+ * Sunday adds the following Monday; s. 88(4) when July 1 is a Sunday, Canada Day falls on July 2;
+ * s. 88(5) Christmas Day on a Saturday adds the following Monday, on a Sunday the following
+ * Tuesday. Civic Holiday is NOT a holiday under s. 88. Saturday is not a holiday.
+ * Proclaimed days (para. 12) cannot be generated: the operator adds them as rows.
+ *
+ * The engine never derives holidays itself: it receives the holiday table rows and the years
+ * that table covers. `ontarioHolidayRows` only generates rows for seeding that table.
  */
 export interface HolidayRow {
   jurisdiction: 'ON';
@@ -15,8 +20,7 @@ export interface HolidayRow {
   source: string;
 }
 
-export const HOLIDAY_SOURCE =
-  'Legislation Act, 2006, S.O. 2006, c. 21, Sched. F, s. 88(2) (SRC-04); listed days only, observed-day substitutions not encoded';
+export const HOLIDAY_SOURCE = 'Legislation Act, 2006, S.O. 2006, c. 21, Sched. F, s. 88(2)-(5) (SRC-04), read on e-Laws 2026-11-11';
 
 function nthWeekday(year: number, month: number, weekday: number, n: number): CivilDate {
   let d = makeDate(year, month, 1);
@@ -52,24 +56,55 @@ function victoriaDay(year: number): CivilDate {
 
 export function ontarioHolidayRows(year: number): HolidayRow[] {
   const easter = easterSunday(year);
+  const newYear = makeDate(year, 1, 1);
+  const july1 = makeDate(year, 7, 1);
+  const christmas = makeDate(year, 12, 25);
   const rows: Array<[CivilDate, string]> = [
-    [makeDate(year, 1, 1), "New Year's Day"],
-    [nthWeekday(year, 2, 1, 3), 'Family Day'],
-    [addDays(easter, -2), 'Good Friday'],
-    [addDays(easter, 1), 'Easter Monday'],
-    [victoriaDay(year), 'Victoria Day'],
-    [makeDate(year, 7, 1), 'Canada Day'],
-    [nthWeekday(year, 8, 1, 1), 'Civic Holiday'],
-    [nthWeekday(year, 9, 1, 1), 'Labour Day'],
-    [nthWeekday(year, 10, 1, 2), 'Thanksgiving Day'],
-    [makeDate(year, 11, 11), 'Remembrance Day'],
-    [makeDate(year, 12, 25), 'Christmas Day'],
-    [makeDate(year, 12, 26), 'Boxing Day'],
+    [newYear, "New Year's Day (s. 88(2) para. 2)"],
+    [nthWeekday(year, 2, 1, 3), 'Family Day (s. 88(2) para. 2.1)'],
+    [addDays(easter, -2), 'Good Friday (s. 88(2) para. 3)'],
+    [addDays(easter, 1), 'Easter Monday (s. 88(2) para. 4)'],
+    [victoriaDay(year), 'Victoria Day (s. 88(2) para. 5)'],
+    // s. 88(4): when July 1 is a Sunday, Canada Day falls on July 2.
+    dayOfWeek(july1) === 0 ? [makeDate(year, 7, 2), 'Canada Day (s. 88(4), July 1 a Sunday)'] : [july1, 'Canada Day (s. 88(2) para. 6)'],
+    [nthWeekday(year, 9, 1, 1), 'Labour Day (s. 88(2) para. 7)'],
+    [nthWeekday(year, 10, 1, 2), 'Thanksgiving Day (s. 88(2) para. 8)'],
+    [makeDate(year, 11, 11), 'Remembrance Day (s. 88(2) para. 9)'],
+    [christmas, 'Christmas Day (s. 88(2) para. 10)'],
+    [makeDate(year, 12, 26), 'Boxing Day (s. 88(2) para. 11)'],
   ];
-  return rows.map(([day, name]) => ({ jurisdiction: 'ON', day, name, source: HOLIDAY_SOURCE }));
+  if (dayOfWeek(newYear) === 0) rows.push([makeDate(year, 1, 2), "Monday after New Year's Day on a Sunday (s. 88(3))"]);
+  if (dayOfWeek(christmas) === 6) rows.push([makeDate(year, 12, 27), 'Monday after Christmas Day on a Saturday (s. 88(5))']);
+  if (dayOfWeek(christmas) === 0) rows.push([makeDate(year, 12, 27), 'Tuesday after Christmas Day on a Sunday (s. 88(5))']);
+  return rows
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([day, name]) => ({ jurisdiction: 'ON', day, name, source: HOLIDAY_SOURCE }));
+}
+
+/** Years the engine may count in: holiday rows exist for every one of them (B1-003). */
+export function yearOf(d: CivilDate): number {
+  return Number(d.slice(0, 4));
 }
 
 export type HolidaySet = ReadonlySet<string>;
+
+export class HolidayCoverageError extends Error {
+  constructor(readonly year: number) {
+    super(`holiday table does not cover ${year}`);
+  }
+}
+
+/** A holiday test outside the covered years fails closed rather than treating the day as ordinary. */
+export function isHolidayCovered(d: CivilDate, holidays: HolidaySet, coveredYears: ReadonlySet<number>): boolean {
+  if (!coveredYears.has(yearOf(d))) throw new HolidayCoverageError(yearOf(d));
+  return isHoliday(d, holidays);
+}
+
+export function extendPastHolidaysCovered(d: CivilDate, holidays: HolidaySet, coveredYears: ReadonlySet<number>): CivilDate {
+  let x = d;
+  for (let i = 0; i < 14 && isHolidayCovered(x, holidays, coveredYears); i++) x = addDays(x, 1);
+  return x;
+}
 
 export function isHoliday(d: CivilDate, holidays: HolidaySet): boolean {
   return dayOfWeek(d) === 0 || holidays.has(d);
